@@ -16,6 +16,7 @@ export function ServersListPage() {
   const [nodeId, setNodeId] = useState("");
   const [eggId, setEggId] = useState("");
   const [memoryMb, setMemoryMb] = useState(1024);
+  const [cpuLimit, setCpuLimit] = useState(0);
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +35,14 @@ export function ServersListPage() {
 
   const createServer = useMutation({
     mutationFn: () =>
-      serversApi.create({ node_id: nodeId, egg_id: eggId, name, memory_bytes: memoryMb * 1024 * 1024, variables }),
+      serversApi.create({
+        node_id: nodeId,
+        egg_id: eggId,
+        name,
+        memory_bytes: memoryMb * 1024 * 1024,
+        cpu_limit: cpuLimit,
+        variables,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["servers"] });
       setShowForm(false);
@@ -107,8 +115,22 @@ export function ServersListPage() {
               value={memoryMb}
               onChange={(e) => setMemoryMb(Number(e.target.value))}
               min={128}
-              step={128}
+              step={1}
             />
+          </div>
+          <div className="sp-field">
+            <label className="sp-label">CPU limit (% of one core)</label>
+            <input
+              className="sp-input"
+              type="number"
+              value={cpuLimit}
+              onChange={(e) => setCpuLimit(Number(e.target.value))}
+              min={0}
+              step={1}
+            />
+            <p className="sp-mono" style={{ fontSize: 12, color: "var(--sp-text-muted)", marginTop: 6 }}>
+              0 = unlimited · 100 = one full core · 200 = two cores
+            </p>
           </div>
 
           {editableVariables.length > 0 && (

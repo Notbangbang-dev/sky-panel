@@ -33,7 +33,24 @@ func (r *Audit) List(limit int) ([]*models.AuditEntry, error) {
 		return nil, err
 	}
 	defer rows.Close()
+	return scanAuditRows(rows)
+}
 
+// ListByTarget returns the most recent audit entries whose target matches
+// the given id (used for a server's per-server activity feed).
+func (r *Audit) ListByTarget(target string, limit int) ([]*models.AuditEntry, error) {
+	rows, err := r.db.Query(
+		`SELECT id, actor_id, action, target, metadata, created_at FROM audit_log WHERE target = ? ORDER BY created_at DESC LIMIT ?`,
+		target, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAuditRows(rows)
+}
+
+func scanAuditRows(rows *sql.Rows) ([]*models.AuditEntry, error) {
 	var out []*models.AuditEntry
 	for rows.Next() {
 		var e models.AuditEntry

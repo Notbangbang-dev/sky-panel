@@ -1,6 +1,10 @@
 package httpapi
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/models"
+)
 
 type auditEntryResponse struct {
 	ActorID   string `json:"actor_id"`
@@ -8,6 +12,12 @@ type auditEntryResponse struct {
 	Target    string `json:"target,omitempty"`
 	Metadata  string `json:"metadata,omitempty"`
 	CreatedAt string `json:"created_at"`
+}
+
+func toAuditEntryResponse(e *models.AuditEntry) auditEntryResponse {
+	return auditEntryResponse{
+		ActorID: e.ActorID, Action: e.Action, Target: e.Target, Metadata: e.Metadata, CreatedAt: e.CreatedAt.Format(rfc3339),
+	}
 }
 
 func (d Deps) AdminListAuditLog(w http.ResponseWriter, r *http.Request) {
@@ -19,9 +29,7 @@ func (d Deps) AdminListAuditLog(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]auditEntryResponse, 0, len(entries))
 	for _, e := range entries {
-		out = append(out, auditEntryResponse{
-			ActorID: e.ActorID, Action: e.Action, Target: e.Target, Metadata: e.Metadata, CreatedAt: e.CreatedAt.Format(rfc3339),
-		})
+		out = append(out, toAuditEntryResponse(e))
 	}
 	writeJSON(w, http.StatusOK, out)
 }

@@ -50,9 +50,17 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/", d.ListServers)
 				r.Post("/", d.CreateServer)
 				r.Get("/{serverID}", d.GetServer)
+				r.Patch("/{serverID}", d.UpdateServer)
 				r.Delete("/{serverID}", d.DeleteServer)
 				r.Post("/{serverID}/power", d.PowerAction)
+				r.Post("/{serverID}/reinstall", d.ReinstallServer)
 				r.Post("/{serverID}/console", d.ConsoleInput)
+				r.Get("/{serverID}/activity", d.ServerActivity)
+
+				r.Get("/{serverID}/backups", d.ListBackups)
+				r.Post("/{serverID}/backups", d.CreateBackup)
+				r.Post("/{serverID}/backups/restore", d.RestoreBackup)
+				r.Delete("/{serverID}/backups", d.DeleteBackup)
 
 				r.Get("/{serverID}/subusers", d.ListSubusers)
 				r.Post("/{serverID}/subusers", d.AddSubuser)

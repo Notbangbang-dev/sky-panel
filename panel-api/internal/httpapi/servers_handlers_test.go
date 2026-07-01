@@ -113,6 +113,14 @@ func connectFakeNodeAgent(t *testing.T, srv *httptest.Server, nodeToken string) 
 			case agenthub.ActionReadFile:
 				result, _ := json.Marshal(agenthub.ReadFileResult{ContentBase64: "ZmFrZS1jb250ZW50cw=="})
 				ack.Result = result
+			case agenthub.ActionBackup:
+				result, _ := json.Marshal(agenthub.BackupResult{Filename: "20260701-120000.tar.zst", SizeBytes: 1024})
+				ack.Result = result
+			case agenthub.ActionListBackups:
+				result, _ := json.Marshal(agenthub.ListBackupsResult{Backups: []agenthub.BackupEntry{
+					{Filename: "backup-1782000000.tar.zst", SizeBytes: 1024, CreatedAt: 1782000000},
+				}})
+				ack.Result = result
 			}
 			ackEnv, err := agenthub.EncodeSigned([]byte(nodeToken), agenthub.TypeAck, ack)
 			if err != nil {

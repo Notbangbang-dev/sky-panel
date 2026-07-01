@@ -21,10 +21,15 @@ type Server struct {
 	ContainerID string
 	Status      ServerStatus
 	MemoryBytes int64
-	Variables   map[string]string
-	PrimaryPort int
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// CPULimit is the CPU cap as a percentage of one core (100 = one full
+	// core, 200 = two cores). 0 means unlimited.
+	CPULimit            int
+	Variables           map[string]string
+	PrimaryPort         int
+	BackupIntervalHours int
+	LastBackupAt        *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type Allocation struct {

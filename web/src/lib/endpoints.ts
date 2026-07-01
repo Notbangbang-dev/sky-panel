@@ -1,6 +1,7 @@
 import { apiRequest } from "./api";
 import type {
   AuditEntry,
+  BackupEntry,
   CoinResult,
   CreateNodeResult,
   Egg,
@@ -36,13 +37,44 @@ export const authApi = {
 export const serversApi = {
   list: () => apiRequest<Server[]>("/api/v1/servers"),
   get: (id: string) => apiRequest<Server>(`/api/v1/servers/${id}`),
-  create: (input: { node_id: string; egg_id: string; name: string; memory_bytes: number; variables?: Record<string, string> }) =>
-    apiRequest<Server>("/api/v1/servers", { method: "POST", body: input }),
+  create: (input: {
+    node_id: string;
+    egg_id: string;
+    name: string;
+    memory_bytes: number;
+    cpu_limit?: number;
+    variables?: Record<string, string>;
+  }) => apiRequest<Server>("/api/v1/servers", { method: "POST", body: input }),
+  update: (
+    id: string,
+    input: {
+      name: string;
+      memory_bytes: number;
+      cpu_limit: number;
+      variables?: Record<string, string>;
+      backup_interval_hours: number;
+    },
+  ) => apiRequest<Server>(`/api/v1/servers/${id}`, { method: "PATCH", body: input }),
+  reinstall: (id: string) => apiRequest<void>(`/api/v1/servers/${id}/reinstall`, { method: "POST" }),
+  activity: (id: string) => apiRequest<AuditEntry[]>(`/api/v1/servers/${id}/activity`),
   remove: (id: string) => apiRequest<void>(`/api/v1/servers/${id}`, { method: "DELETE" }),
   power: (id: string, action: "start" | "stop" | "kill") =>
     apiRequest<void>(`/api/v1/servers/${id}/power`, { method: "POST", body: { action } }),
   consoleInput: (id: string, input: string) =>
     apiRequest<void>(`/api/v1/servers/${id}/console`, { method: "POST", body: { input } }),
+};
+
+export const backupsApi = {
+  list: (serverId: string) =>
+    apiRequest<{ backups: BackupEntry[] }>(`/api/v1/servers/${serverId}/backups`),
+  create: (serverId: string) =>
+    apiRequest<{ filename: string; size_bytes: number }>(`/api/v1/servers/${serverId}/backups`, { method: "POST" }),
+  restore: (serverId: string, filename: string) =>
+    apiRequest<void>(`/api/v1/servers/${serverId}/backups/restore`, { method: "POST", body: { filename } }),
+  remove: (serverId: string, filename: string) =>
+    apiRequest<void>(`/api/v1/servers/${serverId}/backups?filename=${encodeURIComponent(filename)}`, {
+      method: "DELETE",
+    }),
 };
 
 export const subusersApi = {

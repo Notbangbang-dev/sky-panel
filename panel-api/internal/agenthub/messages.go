@@ -77,6 +77,11 @@ const (
 	ActionRenameFile = "rename_file"
 	ActionDeleteFile = "delete_file"
 	ActionMkdir      = "mkdir"
+
+	ActionBackup        = "backup"
+	ActionListBackups   = "list_backups"
+	ActionRestoreBackup = "restore_backup"
+	ActionDeleteBackup  = "delete_backup"
 )
 
 type PortBinding struct {
@@ -129,6 +134,23 @@ type ListFilesResult struct {
 type ReadFileResult struct {
 	ContentBase64 string `json:"content_base64"`
 	SizeBytes     uint64 `json:"size_bytes"`
+}
+
+type BackupEntry struct {
+	Filename  string `json:"filename"`
+	SizeBytes uint64 `json:"size_bytes"`
+	// CreatedAt is unix seconds (the daemon has no date library; the web
+	// formats it). Derived from the archive file's modified time.
+	CreatedAt int64 `json:"created_at"`
+}
+
+type BackupResult struct {
+	Filename  string `json:"filename"`
+	SizeBytes uint64 `json:"size_bytes"`
+}
+
+type ListBackupsResult struct {
+	Backups []BackupEntry `json:"backups"`
 }
 
 // EncodeSigned builds and signs a new envelope carrying payload, using

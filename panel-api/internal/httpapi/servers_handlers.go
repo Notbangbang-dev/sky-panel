@@ -17,26 +17,35 @@ type createServerRequest struct {
 	EggID       string            `json:"egg_id"`
 	Name        string            `json:"name"`
 	MemoryBytes int64             `json:"memory_bytes"`
+	CPULimit    int               `json:"cpu_limit"`
 	Variables   map[string]string `json:"variables,omitempty"`
 }
 
 type serverResponse struct {
-	ID          string            `json:"id"`
-	OwnerID     string            `json:"owner_id"`
-	NodeID      string            `json:"node_id"`
-	EggID       string            `json:"egg_id"`
-	Name        string            `json:"name"`
-	Status      string            `json:"status"`
-	MemoryBytes int64             `json:"memory_bytes"`
-	PrimaryPort int               `json:"primary_port"`
-	Variables   map[string]string `json:"variables"`
+	ID                  string            `json:"id"`
+	OwnerID             string            `json:"owner_id"`
+	NodeID              string            `json:"node_id"`
+	EggID               string            `json:"egg_id"`
+	Name                string            `json:"name"`
+	Status              string            `json:"status"`
+	MemoryBytes         int64             `json:"memory_bytes"`
+	CPULimit            int               `json:"cpu_limit"`
+	PrimaryPort         int               `json:"primary_port"`
+	Variables           map[string]string `json:"variables"`
+	BackupIntervalHours int               `json:"backup_interval_hours"`
+	LastBackupAt        string            `json:"last_backup_at,omitempty"`
 }
 
 func toServerResponse(s *models.Server) serverResponse {
-	return serverResponse{
+	resp := serverResponse{
 		ID: s.ID, OwnerID: s.OwnerID, NodeID: s.NodeID, EggID: s.EggID, Name: s.Name,
-		Status: string(s.Status), MemoryBytes: s.MemoryBytes, PrimaryPort: s.PrimaryPort, Variables: s.Variables,
+		Status: string(s.Status), MemoryBytes: s.MemoryBytes, CPULimit: s.CPULimit, PrimaryPort: s.PrimaryPort,
+		Variables: s.Variables, BackupIntervalHours: s.BackupIntervalHours,
 	}
+	if s.LastBackupAt != nil {
+		resp.LastBackupAt = s.LastBackupAt.Format(rfc3339)
+	}
+	return resp
 }
 
 func (d Deps) CreateServer(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +61,7 @@ func (d Deps) CreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	server, err := d.ServerSvc.CreateServer(claims.UserID, req.NodeID, req.EggID, req.Name, req.MemoryBytes, req.Variables)
+	server, err := d.ServerSvc.CreateServer(claims.UserID, req.NodeID, req.EggID, req.Name, req.MemoryBytes, req.CPULimit, req.Variables)
 	if err != nil {
 		if server != nil {
 			// Provisioned but the node failed to actually create/start it;
@@ -65,6 +74,7 @@ func (d Deps) CreateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
+	d.audit(r, "server.create", server.ID, server.Name)
 
 	writeJSON(w, http.StatusCreated, toServerResponse(server))
 }
@@ -174,6 +184,7 @@ func (d Deps) DeleteServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
+	d.audit(r, "server.delete", server.ID, server.Name)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -204,6 +215,7 @@ func (d Deps) PowerAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "node_dispatch_failed", err.Error())
 		return
 	}
+	d.audit(r, "server.power."+req.Action, server.ID, "")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -238,4 +250,76 @@ func (d Deps) ConsoleInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type updateServerRequest struct {
+	Name                string            `json:"name"`
+	MemoryBytes         int64             `json:"memory_bytes"`
+	CPULimit            int               `json:"cpu_limit"`
+	Variables           map[string]string `json:"variables"`
+	BackupIntervalHours int               `json:"backup_interval_hours"`
+}
+
+// UpdateServer applies edited settings and re-provisions the container.
+// Requires the "settings" permission (owner/admin/settings-subuser).
+func (d Deps) UpdateServer(w http.ResponseWriter, r *http.Request) {
+	server := d.loadServerWithPermission(w, r, models.PermSettings)
+	if server == nil {
+		return
+	}
+
+	var req updateServerRequest
+	if err := decodeJSON(r, &req); err != nil || req.Name == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "name is required")
+		return
+	}
+	if req.MemoryBytes <= 0 {
+		req.MemoryBytes = server.MemoryBytes
+	}
+
+	updated, err := d.ServerSvc.UpdateServer(server.ID, req.Name, req.MemoryBytes, req.CPULimit, req.Variables, req.BackupIntervalHours)
+	if err != nil {
+		if updated != nil {
+			writeJSON(w, http.StatusBadGateway, map[string]any{
+				"error": "node_dispatch_failed", "message": err.Error(), "server": toServerResponse(updated),
+			})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	d.audit(r, "server.settings", server.ID, req.Name)
+	writeJSON(w, http.StatusOK, toServerResponse(updated))
+}
+
+// ReinstallServer recreates the container from its egg (files preserved).
+func (d Deps) ReinstallServer(w http.ResponseWriter, r *http.Request) {
+	server := d.loadServerWithPermission(w, r, models.PermSettings)
+	if server == nil {
+		return
+	}
+	if err := d.ServerSvc.ReinstallServer(server.ID); err != nil {
+		writeError(w, http.StatusBadGateway, "node_dispatch_failed", err.Error())
+		return
+	}
+	d.audit(r, "server.reinstall", server.ID, "")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ServerActivity returns the recent audit entries scoped to this server.
+func (d Deps) ServerActivity(w http.ResponseWriter, r *http.Request) {
+	server := d.loadServerWithPermission(w, r, "")
+	if server == nil {
+		return
+	}
+	entries, err := d.Audit.ListByTarget(server.ID, 100)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load activity")
+		return
+	}
+	out := make([]auditEntryResponse, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, toAuditEntryResponse(e))
+	}
+	writeJSON(w, http.StatusOK, out)
 }

@@ -65,8 +65,17 @@ export interface Server {
   name: string;
   status: ServerStatus;
   memory_bytes: number;
+  cpu_limit: number;
   primary_port: number;
   variables: Record<string, string>;
+  backup_interval_hours: number;
+  last_backup_at?: string;
+}
+
+export interface BackupEntry {
+  filename: string;
+  size_bytes: number;
+  created_at: number;
 }
 
 export interface CoinResult {

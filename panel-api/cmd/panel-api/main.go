@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/agenthub"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/auth"
+	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/backupsvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/coinsvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/config"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/httpapi"
@@ -39,6 +42,7 @@ func main() {
 
 	agentRegistry := agenthub.NewRegistry()
 	agentHandler := agenthub.NewHandler(agentRegistry, nodes, hub)
+	serverSvc := serversvc.NewService(servers, eggs, nodes, allocations, agentRegistry)
 
 	deps := httpapi.Deps{
 		Users:         users,
@@ -50,13 +54,16 @@ func main() {
 		Servers:       servers,
 		Allocations:   allocations,
 		Subusers:      subusers,
-		ServerSvc:     serversvc.NewService(servers, eggs, nodes, allocations, agentRegistry),
+		ServerSvc:     serverSvc,
 		AgentHub:      agentHandler,
 		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards),
 		Settings:      settings,
 		Audit:         auditLog,
 		RefreshTTL:    cfg.RefreshTTL,
 	}
+
+	// Background loop that runs due scheduled backups.
+	go backupsvc.NewScheduler(servers, serverSvc, 15*time.Minute).Run(context.Background())
 
 	log.Printf("sky-panel panel-api listening on %s", cfg.HTTPAddr)
 	if err := http.ListenAndServe(cfg.HTTPAddr, httpapi.NewRouter(deps)); err != nil {

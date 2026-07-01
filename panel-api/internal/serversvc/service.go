@@ -5,6 +5,7 @@
 package serversvc
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -41,7 +42,7 @@ var ErrCommandFailed = fmt.Errorf("node reported command failure")
 // asks the node to create + start the container. The server row is
 // persisted regardless of whether the node ack succeeds, so a failure is
 // visible/retryable rather than silently vanishing.
-func (s *Service) CreateServer(ownerID, nodeID, eggID, name string, memoryBytes int64, overrides map[string]string) (*models.Server, error) {
+func (s *Service) CreateServer(ownerID, nodeID, eggID, name string, memoryBytes int64, cpuLimit int, overrides map[string]string) (*models.Server, error) {
 	egg, err := s.Eggs.GetByID(eggID)
 	if err != nil {
 		return nil, fmt.Errorf("load egg: %w", err)
@@ -65,6 +66,7 @@ func (s *Service) CreateServer(ownerID, nodeID, eggID, name string, memoryBytes 
 		Name:        name,
 		Status:      models.StatusInstalling,
 		MemoryBytes: memoryBytes,
+		CPULimit:    cpuLimit,
 		Variables:   overrides,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -83,45 +85,120 @@ func (s *Service) CreateServer(ownerID, nodeID, eggID, name string, memoryBytes 
 	}
 	server.PrimaryPort = port
 
-	resolved := resolveVariables(egg.Variables, overrides)
-	resolved["SERVER_MEMORY"] = strconv.FormatInt(memoryBytes/1024/1024, 10)
-	resolved["SERVER_PORT"] = strconv.Itoa(port)
-	resolved["SERVER_UUID"] = serverID
+	if err := s.provision(server, egg); err != nil {
+		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
+		return server, err
+	}
+
+	_ = s.Servers.SetStatus(serverID, models.StatusRunning)
+	server.Status = models.StatusRunning
+	return server, nil
+}
+
+// UpdateServer applies edited settings (name, resource limits, egg
+// variables, backup schedule) and re-provisions the container so the new
+// spec takes effect. The server's volume (and therefore its data) is
+// preserved — only the container is recreated.
+func (s *Service) UpdateServer(serverID, name string, memoryBytes int64, cpuLimit int, overrides map[string]string, backupIntervalHours int) (*models.Server, error) {
+	if err := s.Servers.UpdateSettings(serverID, name, memoryBytes, cpuLimit, overrides, backupIntervalHours); err != nil {
+		return nil, fmt.Errorf("persist settings: %w", err)
+	}
+
+	server, err := s.Servers.GetByID(serverID)
+	if err != nil {
+		return nil, fmt.Errorf("reload server: %w", err)
+	}
+	egg, err := s.Eggs.GetByID(server.EggID)
+	if err != nil {
+		return nil, fmt.Errorf("load egg: %w", err)
+	}
+
+	// Recreate the container with the new spec (remove is best-effort — the
+	// container may not exist if it was never started or the node was down).
+	_, _ = s.dispatch(server.NodeID, agenthub.ActionRemove, serverID, nil)
+	if err := s.provision(server, egg); err != nil {
+		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
+		return server, err
+	}
+	_ = s.Servers.SetStatus(serverID, models.StatusRunning)
+	server.Status = models.StatusRunning
+	return server, nil
+}
+
+// ReinstallServer recreates the container from its egg, re-running the
+// image's install/startup against the (preserved) volume — a fresh
+// container without wiping the server's files.
+func (s *Service) ReinstallServer(serverID string) error {
+	server, err := s.Servers.GetByID(serverID)
+	if err != nil {
+		return fmt.Errorf("load server: %w", err)
+	}
+	egg, err := s.Eggs.GetByID(server.EggID)
+	if err != nil {
+		return fmt.Errorf("load egg: %w", err)
+	}
+
+	_, _ = s.dispatch(server.NodeID, agenthub.ActionRemove, serverID, nil)
+	if err := s.provision(server, egg); err != nil {
+		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
+		return err
+	}
+	return s.Servers.SetStatus(serverID, models.StatusRunning)
+}
+
+// provision builds the container spec for a server and dispatches
+// create + start to its node.
+func (s *Service) provision(server *models.Server, egg *models.Egg) error {
+	spec := s.buildSpec(server, egg)
+	if _, err := s.dispatch(server.NodeID, agenthub.ActionCreate, server.ID, spec); err != nil {
+		return fmt.Errorf("dispatch create: %w", err)
+	}
+	if _, err := s.dispatch(server.NodeID, agenthub.ActionStart, server.ID, nil); err != nil {
+		return fmt.Errorf("dispatch start: %w", err)
+	}
+	return nil
+}
+
+// buildSpec turns a server + its egg into a concrete container spec:
+// resolves variables, injects the built-in SERVER_* and MEMORY env vars,
+// substitutes the startup command, and maps resource limits.
+func (s *Service) buildSpec(server *models.Server, egg *models.Egg) *agenthub.ContainerSpec {
+	mib := server.MemoryBytes / 1024 / 1024
+
+	resolved := resolveVariables(egg.Variables, server.Variables)
+	// MEMORY defaults to the server's memory limit (itzg images size their
+	// JVM heap from it) unless the egg explicitly defines its own.
+	if _, ok := resolved["MEMORY"]; !ok {
+		resolved["MEMORY"] = fmt.Sprintf("%dM", mib)
+	}
+	resolved["SERVER_MEMORY"] = strconv.FormatInt(mib, 10)
+	resolved["SERVER_PORT"] = strconv.Itoa(server.PrimaryPort)
+	resolved["SERVER_UUID"] = server.ID
 
 	env := make([]string, 0, len(resolved))
 	for k, v := range resolved {
 		env = append(env, k+"="+v)
 	}
 
-	cmd := tokenizeCommand(substitute(egg.Startup, resolved))
+	// CPU limit is a percentage of one core; Docker wants nano-CPUs
+	// (1 core = 1e9). 0 leaves it unlimited.
+	nanoCPUs := int64(server.CPULimit) * 10_000_000
 
-	spec := &agenthub.ContainerSpec{
-		Name:        "sky-" + serverID,
+	return &agenthub.ContainerSpec{
+		Name:        "sky-" + server.ID,
 		Image:       egg.DockerImage,
-		Cmd:         cmd,
+		Cmd:         tokenizeCommand(substitute(egg.Startup, resolved)),
 		Env:         env,
 		WorkingDir:  "/home/container",
-		Binds:       []string{fmt.Sprintf("/srv/sky-panel/volumes/%s:/home/container", serverID)},
-		MemoryBytes: memoryBytes,
+		Binds:       []string{fmt.Sprintf("/srv/sky-panel/volumes/%s:/home/container", server.ID)},
+		MemoryBytes: server.MemoryBytes,
+		NanoCPUs:    nanoCPUs,
 		PortBindings: []agenthub.PortBinding{
-			{ContainerPort: fmt.Sprintf("%d/tcp", port), HostPort: strconv.Itoa(port)},
-			{ContainerPort: fmt.Sprintf("%d/udp", port), HostPort: strconv.Itoa(port)},
+			{ContainerPort: fmt.Sprintf("%d/tcp", server.PrimaryPort), HostPort: strconv.Itoa(server.PrimaryPort)},
+			{ContainerPort: fmt.Sprintf("%d/udp", server.PrimaryPort), HostPort: strconv.Itoa(server.PrimaryPort)},
 		},
-		Labels: map[string]string{"sky-panel.server_id": serverID},
+		Labels: map[string]string{"sky-panel.server_id": server.ID},
 	}
-
-	if _, err := s.dispatch(nodeID, agenthub.ActionCreate, serverID, spec); err != nil {
-		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
-		return server, fmt.Errorf("dispatch create: %w", err)
-	}
-	if _, err := s.dispatch(nodeID, agenthub.ActionStart, serverID, nil); err != nil {
-		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
-		return server, fmt.Errorf("dispatch start: %w", err)
-	}
-
-	_ = s.Servers.SetStatus(serverID, models.StatusRunning)
-	server.Status = models.StatusRunning
-	return server, nil
 }
 
 // PowerAction sends a start/stop/kill command for an existing server.
@@ -161,6 +238,73 @@ func (s *Service) DeleteServer(serverID string) error {
 		return fmt.Errorf("release allocation: %w", err)
 	}
 	return s.Servers.Delete(serverID)
+}
+
+// Backup dispatches a backup command and, on success, records the time so
+// the scheduler knows when the next scheduled backup is due.
+func (s *Service) Backup(serverID string) (agenthub.BackupResult, error) {
+	server, err := s.Servers.GetByID(serverID)
+	if err != nil {
+		return agenthub.BackupResult{}, fmt.Errorf("load server: %w", err)
+	}
+	ack, err := s.dispatch(server.NodeID, agenthub.ActionBackup, serverID, nil)
+	if err != nil {
+		return agenthub.BackupResult{}, err
+	}
+	var result agenthub.BackupResult
+	if len(ack.Result) > 0 {
+		_ = json.Unmarshal(ack.Result, &result)
+	}
+	_ = s.Servers.MarkBackedUp(serverID, time.Now().UTC())
+	return result, nil
+}
+
+// ListBackups asks the node for the backups it holds for a server.
+func (s *Service) ListBackups(serverID string) ([]agenthub.BackupEntry, error) {
+	server, err := s.Servers.GetByID(serverID)
+	if err != nil {
+		return nil, fmt.Errorf("load server: %w", err)
+	}
+	ack, err := s.dispatch(server.NodeID, agenthub.ActionListBackups, serverID, nil)
+	if err != nil {
+		return nil, err
+	}
+	var result agenthub.ListBackupsResult
+	if len(ack.Result) > 0 {
+		if err := json.Unmarshal(ack.Result, &result); err != nil {
+			return nil, fmt.Errorf("decode backup list: %w", err)
+		}
+	}
+	return result.Backups, nil
+}
+
+// RestoreBackup / DeleteBackup act on a single backup archive by filename.
+func (s *Service) RestoreBackup(serverID, filename string) error {
+	return s.dispatchFile(serverID, agenthub.ActionRestoreBackup, filename)
+}
+
+func (s *Service) DeleteBackup(serverID, filename string) error {
+	return s.dispatchFile(serverID, agenthub.ActionDeleteBackup, filename)
+}
+
+func (s *Service) dispatchFile(serverID, action, path string) error {
+	server, err := s.Servers.GetByID(serverID)
+	if err != nil {
+		return fmt.Errorf("load server: %w", err)
+	}
+	ack, err := s.Hub.SendCommand(server.NodeID, agenthub.CommandPayload{
+		CommandID: uuid.NewString(),
+		Action:    action,
+		ServerID:  serverID,
+		Path:      path,
+	})
+	if err != nil {
+		return err
+	}
+	if !ack.OK {
+		return fmt.Errorf("%w: %s", ErrCommandFailed, ack.Error)
+	}
+	return nil
 }
 
 func (s *Service) dispatch(nodeID, action, serverID string, spec *agenthub.ContainerSpec) (agenthub.AckPayload, error) {

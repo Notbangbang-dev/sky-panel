@@ -8,6 +8,9 @@ import { Console } from "../components/Console";
 import { StatusBadge } from "../components/StatusBadge";
 import { FilesTab } from "../components/server/FilesTab";
 import { SharingTab } from "../components/server/SharingTab";
+import { SettingsTab } from "../components/server/SettingsTab";
+import { ActivityTab } from "../components/server/ActivityTab";
+import { BackupsTab } from "../components/server/BackupsTab";
 import type { ContainerHeartbeat } from "../types/api";
 
 interface ConsoleLine {
@@ -16,7 +19,7 @@ interface ConsoleLine {
   message: string;
 }
 
-const TABS = ["Console", "Files", "Sharing"] as const;
+const TABS = ["Console", "Files", "Backups", "Activity", "Settings", "Sharing"] as const;
 type Tab = (typeof TABS)[number];
 
 export function ServerDetailPage() {
@@ -27,8 +30,8 @@ export function ServerDetailPage() {
 
   const { data: server } = useQuery({ queryKey: ["servers", id], queryFn: () => serversApi.get(id!), enabled: !!id });
 
-  const canManageSharing = !!server && !!user && (server.owner_id === user.id || user.role === "admin");
-  const visibleTabs = TABS.filter((t) => t !== "Sharing" || canManageSharing);
+  const canManage = !!server && !!user && (server.owner_id === user.id || user.role === "admin");
+  const visibleTabs = TABS.filter((t) => (t !== "Sharing" && t !== "Settings") || canManage);
   const [tab, setTab] = useState<Tab>("Console");
 
   const [lines, setLines] = useState<string[]>([]);
@@ -47,6 +50,11 @@ export function ServerDetailPage() {
   const remove = useMutation({
     mutationFn: () => serversApi.remove(id!),
     onSuccess: () => navigate("/servers"),
+  });
+
+  const reinstall = useMutation({
+    mutationFn: () => serversApi.reinstall(id!),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["servers", id] }),
   });
 
   const sendInput = (line: string) => serversApi.consoleInput(id!, line).catch(() => {});
@@ -72,6 +80,19 @@ export function ServerDetailPage() {
           <button className="sp-btn sp-btn--danger" onClick={() => power.mutate("kill")}>
             Kill
           </button>
+          {canManage && (
+            <button
+              className="sp-btn sp-btn--danger"
+              onClick={() => {
+                if (window.confirm("Reinstall this server? The container is rebuilt from its egg. Your files are kept.")) {
+                  reinstall.mutate();
+                }
+              }}
+              disabled={reinstall.isPending}
+            >
+              {reinstall.isPending ? "Reinstalling…" : "Reinstall"}
+            </button>
+          )}
           <button className="sp-btn sp-btn--danger" onClick={() => remove.mutate()}>
             Delete
           </button>
@@ -104,7 +125,10 @@ export function ServerDetailPage() {
         </div>
       )}
       {tab === "Files" && <FilesTab serverId={id!} />}
-      {tab === "Sharing" && canManageSharing && <SharingTab serverId={id!} />}
+      {tab === "Backups" && <BackupsTab serverId={id!} />}
+      {tab === "Activity" && <ActivityTab serverId={id!} />}
+      {tab === "Settings" && canManage && <SettingsTab server={server} />}
+      {tab === "Sharing" && canManage && <SharingTab serverId={id!} />}
     </div>
   );
 }

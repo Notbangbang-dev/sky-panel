@@ -2,6 +2,26 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0] - 2026-07-01
+
+### ✨ New Features
+
+- **Per-server Settings tab** — rename a server and change its Memory, CPU limit, and automatic-backup interval from a proper form. Saving re-provisions the container in place; your files and world data are preserved.
+- **CPU limits** — servers now take a real CPU cap (percent of one core: `0` = unlimited, `100` = one full core, `200` = two cores), enforced by the node via Docker. Available both when creating a server and in the Settings tab.
+- **Reinstall server** — a one-click rebuild of the container from its egg, keeping the server's volume (files, worlds, configs) intact. Handy after changing an egg or recovering from a broken image.
+- **Backups tab** — take an on-demand snapshot of a server's files (compressed on the node with tar + zstd), then restore or delete any snapshot from a list.
+- **Scheduled backups** — set an interval (in hours) in the Settings tab and the panel snapshots the server automatically on that cadence.
+- **Per-server Activity log** — every power action, settings change, reinstall, delete, and backup is recorded and shown on a new Activity tab, with timestamps.
+
+### 🛠 Fixes
+
+- The Memory (and other numeric) inputs no longer reject values like `3232` with "please enter a value greater than…". They snap to whole numbers now instead of forcing multiples of 128.
+- Minecraft eggs no longer carry a duplicate `Memory` variable next to the panel's own Memory field — the panel injects the JVM heap size from the server's Memory setting directly, so there was no second place to set it.
+
+### 📦 Requires
+
+- **sky-daemon v0.2.0** for the backup features (`Back up now`, restore, delete, and scheduled backups). Update your nodes with `sudo sky-panel-update`. CPU limits, reinstall, settings, and the activity log work with any daemon version.
+
 ## [0.4.0] - 2026-07-01
 
 ### 🚀 Improvements
