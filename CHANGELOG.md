@@ -2,6 +2,15 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.1] - 2026-07-01
+
+### 🛠 Fixes
+
+- The released web build was hardcoding `http://localhost:8080` as the API URL (a build-time default that only ever worked on the machine building it, not a deployed server) — every real deployment of v0.2.0 failed to register/log in with a generic "Something went wrong." The release build now targets same-origin, matching how Caddy already proxies panel-api and the web assets together. Also fixes the same issue for the real-time WebSocket connection, which can't use a relative URL the way a same-origin `fetch()` can.
+- `install.sh`'s sibling files (systemd units, `sky-panel-update`) are now fetched from the repo instead of assumed to sit next to a curl-downloaded `install.sh`, matching how it's actually documented to be installed.
+
+If you installed v0.2.0 and hit a "Something went wrong" on register/login, re-run `sudo bash install.sh panel` (after `sudo systemctl stop sky-panel` first, since install.sh doesn't stop the service before replacing its binary) to pick up this fix.
+
 ## [0.2.0] - 2026-07-01
 
 ### ✨ New Features

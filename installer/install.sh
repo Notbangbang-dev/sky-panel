@@ -109,6 +109,11 @@ install_panel() {
   mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/data" "$INSTALL_DIR/web"
   create_service_user
 
+  # Stop before overwriting the binary in place — re-running this against
+  # an already-running install (e.g. to fix a bad --domain) can otherwise
+  # fail the download's write with the service still holding it open.
+  systemctl stop sky-panel 2>/dev/null || true
+
   download_release_asset "$REPO" "$tag" "panel-api-linux-${arch}" "$INSTALL_DIR/bin/panel-api"
   chmod +x "$INSTALL_DIR/bin/panel-api"
 
@@ -189,6 +194,7 @@ install_node() {
 
   log "installing sky-daemon (release ${tag}, linux/${arch})"
   mkdir -p "$INSTALL_DIR/bin" "$VOLUMES_ROOT"
+  systemctl stop sky-daemon 2>/dev/null || true
   download_release_asset "$DAEMON_REPO" "$tag" "sky-daemon-linux-${arch}" "$INSTALL_DIR/bin/sky-daemon"
   chmod +x "$INSTALL_DIR/bin/sky-daemon"
 
