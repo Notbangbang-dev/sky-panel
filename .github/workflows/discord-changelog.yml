@@ -7,7 +7,6 @@ on:
 jobs:
   notify:
     runs-on: ubuntu-latest
-    if: ${{ vars.DISCORD_WEBHOOK_URL != '' || secrets.DISCORD_WEBHOOK_URL != '' }}
     steps:
       - name: Post release notes to Discord
         env:
@@ -16,6 +15,11 @@ jobs:
           RELEASE_URL: ${{ github.event.release.html_url }}
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "no DISCORD_WEBHOOK_URL secret/var configured, skipping"
+            exit 0
+          fi
+
           # Discord messages cap at 2000 chars; truncate generously with a
           # pointer back to the full release for anything longer.
           BODY=$(printf '%s' "$RELEASE_BODY" | head -c 1500)
