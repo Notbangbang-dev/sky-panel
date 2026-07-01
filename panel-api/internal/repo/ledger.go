@@ -63,7 +63,7 @@ func (r *Ledger) AddEntry(userID string, amount int64, reason, metadata string) 
 func (r *Ledger) ListByUser(userID string, limit int) ([]*models.LedgerEntry, error) {
 	rows, err := r.db.Query(
 		`SELECT id, user_id, amount, reason, metadata, created_at FROM ledger_entries
-		 WHERE user_id = ? ORDER BY created_at DESC LIMIT ?`, userID, limit,
+		 WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?`, userID, limit,
 	)
 	if err != nil {
 		return nil, err

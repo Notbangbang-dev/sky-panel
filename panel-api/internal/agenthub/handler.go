@@ -5,19 +5,38 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
+	"golang.org/x/time/rate"
 
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/auth"
 )
 
-var errUnexpectedFirstMessage = errors.New("agenthub: expected hello as the first message")
+var (
+	errUnexpectedFirstMessage = errors.New("agenthub: expected hello as the first message")
+	errNodeTokenExpired       = errors.New("agenthub: node token has expired")
+)
 
-// NodeLookup resolves a node token hash to a node ID. It's an interface
-// (rather than *repo.Nodes directly) so the handler can be unit tested
-// without a database.
+// How long an incoming envelope's nonce is remembered for replay detection.
+// Comfortably wider than MaxClockSkewSecs so a message can never both pass
+// the freshness check and have its nonce cache entry expire before a
+// replay would be caught.
+const nonceCacheTTL = 120 * time.Second
+
+// Per-connection inbound message budget: generous for heartbeats (every
+// few seconds) plus occasional events/acks, but tight enough that a
+// misbehaving or compromised node can't flood the panel.
+const (
+	rateLimitPerSecond = 20
+	rateLimitBurst     = 40
+)
+
+// NodeLookup resolves a node's identity and secret from its hello token.
+// It's an interface (rather than *repo.Nodes directly) so the handler can
+// be unit tested without a database.
 type NodeLookup interface {
-	NodeIDForTokenHash(tokenHash string) (string, error)
+	AuthenticateNode(tokenHash string) (nodeID, token string, expiresAt time.Time, err error)
 }
 
 // EventSink receives heartbeat/event traffic forwarded from a node, keyed by
@@ -43,9 +62,11 @@ func NewHandler(registry *Registry, nodes NodeLookup, sink EventSink) *Handler {
 	return &Handler{Registry: registry, Nodes: nodes, Sink: sink}
 }
 
-// ServeWS accepts a node-agent's inbound connection. The HTTP layer itself
+// ServeWS accepts a node's inbound connection. The HTTP layer itself
 // requires no auth (nodes dial in from arbitrary VPS IPs); identity is
-// established by validating the first message's node token instead.
+// established by validating the first message's node token instead, and
+// every message after that must carry a valid signature keyed by that
+// node's secret (see Envelope.Verify).
 func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -53,46 +74,66 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	nodeID, err := h.awaitHello(ws)
+	nodeID, secret, err := h.awaitHello(ws)
 	if err != nil {
 		log.Printf("agenthub: rejecting connection: %v", err)
 		return
 	}
 
-	conn := newConn(nodeID, ws)
+	conn := newConn(nodeID, ws, secret)
 	h.Registry.register(nodeID, conn)
 	defer h.Registry.unregister(nodeID, conn)
 
 	log.Printf("agenthub: node %s connected", nodeID)
-	h.readLoop(nodeID, conn, ws)
+	h.readLoop(conn, ws, secret)
 	log.Printf("agenthub: node %s disconnected", nodeID)
 }
 
-func (h *Handler) awaitHello(ws *websocket.Conn) (string, error) {
+func (h *Handler) awaitHello(ws *websocket.Conn) (nodeID string, secret []byte, err error) {
 	var env Envelope
 	if err := ws.ReadJSON(&env); err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if env.Type != TypeHello {
-		return "", errUnexpectedFirstMessage
+		return "", nil, errUnexpectedFirstMessage
 	}
 
 	var hello HelloPayload
 	if err := json.Unmarshal(env.Payload, &hello); err != nil {
-		return "", err
+		return "", nil, err
 	}
 
-	nodeID, err := h.Nodes.NodeIDForTokenHash(auth.HashToken(hello.NodeToken))
+	id, token, expiresAt, err := h.Nodes.AuthenticateNode(auth.HashToken(hello.NodeToken))
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return nodeID, nil
+	if time.Now().After(expiresAt) {
+		return "", nil, errNodeTokenExpired
+	}
+
+	return id, []byte(token), nil
 }
 
-func (h *Handler) readLoop(nodeID string, conn *Conn, ws *websocket.Conn) {
+func (h *Handler) readLoop(conn *Conn, ws *websocket.Conn, secret []byte) {
+	nonces := newNonceCache(nonceCacheTTL)
+	limiter := rate.NewLimiter(rate.Limit(rateLimitPerSecond), rateLimitBurst)
+
 	for {
 		var env Envelope
 		if err := ws.ReadJSON(&env); err != nil {
+			return
+		}
+
+		if !limiter.Allow() {
+			log.Printf("agenthub: node %s exceeded its message rate limit, closing connection", conn.NodeID)
+			return
+		}
+		if !env.Verify(secret) {
+			log.Printf("agenthub: node %s sent an envelope with an invalid signature or stale timestamp (type=%s), closing connection", conn.NodeID, env.Type)
+			return
+		}
+		if !nonces.checkAndRecord(env.Nonce) {
+			log.Printf("agenthub: node %s replayed a nonce, closing connection", conn.NodeID)
 			return
 		}
 

@@ -41,6 +41,7 @@ func newFullTestRouter(t *testing.T) (http.Handler, *repo.Allocations) {
 	eggs := repo.NewEggs(db)
 	servers := repo.NewServers(db)
 	allocations := repo.NewAllocations(db)
+	subusers := repo.NewSubusers(db)
 	ledger := repo.NewLedger(db)
 	afk := repo.NewAFKState(db)
 	dailyRewards := repo.NewDailyRewards(db)
@@ -58,6 +59,7 @@ func newFullTestRouter(t *testing.T) (http.Handler, *repo.Allocations) {
 		Eggs:          eggs,
 		Servers:       servers,
 		Allocations:   allocations,
+		Subusers:      subusers,
 		ServerSvc:     serversvc.NewService(servers, eggs, nodes, allocations, registry),
 		AgentHub:      agentHandler,
 		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards),
@@ -80,7 +82,7 @@ func connectFakeNodeAgent(t *testing.T, srv *httptest.Server, nodeToken string) 
 		t.Fatalf("dial agent ws: %v", err)
 	}
 
-	env, err := agenthub.Encode(agenthub.TypeHello, agenthub.HelloPayload{NodeToken: nodeToken, AgentVersion: "test"})
+	env, err := agenthub.EncodeSigned([]byte(nodeToken), agenthub.TypeHello, agenthub.HelloPayload{NodeToken: nodeToken, AgentVersion: "test"})
 	if err != nil {
 		t.Fatalf("encode hello: %v", err)
 	}
@@ -101,7 +103,18 @@ func connectFakeNodeAgent(t *testing.T, srv *httptest.Server, nodeToken string) 
 			if json.Unmarshal(in.Payload, &cmd) != nil {
 				continue
 			}
-			ackEnv, err := agenthub.Encode(agenthub.TypeAck, agenthub.AckPayload{CommandID: cmd.CommandID, OK: true})
+			ack := agenthub.AckPayload{CommandID: cmd.CommandID, OK: true}
+			switch cmd.Action {
+			case agenthub.ActionListFiles:
+				result, _ := json.Marshal(agenthub.ListFilesResult{Entries: []agenthub.FileEntry{
+					{Name: "server.properties", IsDir: false, SizeBytes: 42},
+				}})
+				ack.Result = result
+			case agenthub.ActionReadFile:
+				result, _ := json.Marshal(agenthub.ReadFileResult{ContentBase64: "ZmFrZS1jb250ZW50cw=="})
+				ack.Result = result
+			}
+			ackEnv, err := agenthub.EncodeSigned([]byte(nodeToken), agenthub.TypeAck, ack)
 			if err != nil {
 				continue
 			}

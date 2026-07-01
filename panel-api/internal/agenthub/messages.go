@@ -1,14 +1,27 @@
 // Package agenthub is panel-api's side of the persistent outbound WebSocket
-// connection each node-agent opens inward. The message schema here mirrors
-// node-agent's internal/protocol package by convention (they're separate Go
-// modules communicating over plain JSON, not a shared package).
+// connection each sky-daemon opens inward. The message schema here mirrors
+// sky-daemon's `protocol` crate by convention (separate repos communicating
+// over plain signed JSON, not a shared package).
 package agenthub
 
-import "encoding/json"
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
+// Envelope is every message on the wire, in both directions. Payload stays
+// as raw, unparsed JSON so the signature always covers the exact bytes
+// that were transmitted — re-serializing a parsed value could reorder
+// fields or change whitespace and silently break verification.
 type Envelope struct {
-	Type    string          `json:"type"`
-	Payload json.RawMessage `json:"payload"`
+	Type      string          `json:"type"`
+	Timestamp int64           `json:"timestamp"`
+	Nonce     string          `json:"nonce"`
+	Payload   json.RawMessage `json:"payload"`
+	Sig       string          `json:"sig"`
 }
 
 const (
@@ -52,12 +65,18 @@ type EventPayload struct {
 }
 
 const (
-	ActionCreate  = "create"
-	ActionStart   = "start"
-	ActionStop    = "stop"
-	ActionKill    = "kill"
-	ActionRemove  = "remove"
-	ActionConsole = "console_input"
+	ActionCreate     = "create"
+	ActionStart      = "start"
+	ActionStop       = "stop"
+	ActionKill       = "kill"
+	ActionRemove     = "remove"
+	ActionConsole    = "console_input"
+	ActionListFiles  = "list_files"
+	ActionReadFile   = "read_file"
+	ActionWriteFile  = "write_file"
+	ActionRenameFile = "rename_file"
+	ActionDeleteFile = "delete_file"
+	ActionMkdir      = "mkdir"
 )
 
 type PortBinding struct {
@@ -79,24 +98,80 @@ type ContainerSpec struct {
 }
 
 type CommandPayload struct {
-	CommandID   string         `json:"command_id"`
-	Action      string         `json:"action"`
-	ServerID    string         `json:"server_id"`
-	ContainerID string         `json:"container_id,omitempty"`
-	Spec        *ContainerSpec `json:"spec,omitempty"`
-	Input       string         `json:"input,omitempty"`
+	CommandID      string         `json:"command_id"`
+	Action         string         `json:"action"`
+	ServerID       string         `json:"server_id"`
+	ContainerID    string         `json:"container_id,omitempty"`
+	Spec           *ContainerSpec `json:"spec,omitempty"`
+	Input          string         `json:"input,omitempty"`
+	Path           string         `json:"path,omitempty"`
+	NewPath        string         `json:"new_path,omitempty"`
+	ContentBase64  string         `json:"content_base64,omitempty"`
 }
 
 type AckPayload struct {
-	CommandID string `json:"command_id"`
-	OK        bool   `json:"ok"`
-	Error     string `json:"error,omitempty"`
+	CommandID string          `json:"command_id"`
+	OK        bool            `json:"ok"`
+	Error     string          `json:"error,omitempty"`
+	Result    json.RawMessage `json:"result,omitempty"`
 }
 
-func Encode(msgType string, payload any) (Envelope, error) {
-	raw, err := json.Marshal(payload)
+type FileEntry struct {
+	Name      string `json:"name"`
+	IsDir     bool   `json:"is_dir"`
+	SizeBytes uint64 `json:"size_bytes"`
+}
+
+type ListFilesResult struct {
+	Entries []FileEntry `json:"entries"`
+}
+
+type ReadFileResult struct {
+	ContentBase64 string `json:"content_base64"`
+	SizeBytes     uint64 `json:"size_bytes"`
+}
+
+// EncodeSigned builds and signs a new envelope carrying payload, using
+// secret as the HMAC key (the node's raw token).
+func EncodeSigned(secret []byte, kind string, payload any) (Envelope, error) {
+	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return Envelope{}, err
 	}
-	return Envelope{Type: msgType, Payload: raw}, nil
+
+	nonce, err := randomNonce()
+	if err != nil {
+		return Envelope{}, err
+	}
+
+	timestamp := time.Now().Unix()
+	sig := Sign(secret, kind, timestamp, nonce, payloadBytes)
+
+	return Envelope{Type: kind, Timestamp: timestamp, Nonce: nonce, Payload: json.RawMessage(payloadBytes), Sig: sig}, nil
+}
+
+// Verify checks this envelope's signature and timestamp freshness against
+// secret. It does not check nonce uniqueness — that's stateful and belongs
+// to the caller (see nonceCache), not this otherwise-pure type.
+func (e Envelope) Verify(secret []byte) bool {
+	if !e.TimestampIsFresh() {
+		return false
+	}
+	return Verify(secret, e.Type, e.Timestamp, e.Nonce, e.Payload, e.Sig)
+}
+
+func (e Envelope) TimestampIsFresh() bool {
+	delta := time.Now().Unix() - e.Timestamp
+	if delta < 0 {
+		delta = -delta
+	}
+	return delta <= MaxClockSkewSecs
+}
+
+func randomNonce() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate nonce: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }

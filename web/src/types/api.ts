@@ -18,10 +18,16 @@ export interface Node {
   name: string;
   address: string;
   docker_socket: string;
+  expires_at: string;
 }
 
 export interface CreateNodeResult extends Node {
   node_token: string;
+}
+
+export interface RotateNodeTokenResult {
+  node_token: string;
+  expires_at: string;
 }
 
 export interface EggVariable {
@@ -94,4 +100,27 @@ export interface ContainerHeartbeat {
 export interface TotpSetup {
   secret: string;
   url: string;
+}
+
+export const PERMISSIONS = ["console", "files", "power", "settings"] as const;
+export type Permission = (typeof PERMISSIONS)[number];
+
+export interface Subuser {
+  user_id: string;
+  permissions: Permission[];
+}
+
+export interface FileEntry {
+  name: string;
+  is_dir: boolean;
+  size_bytes: number;
+}
+
+export interface ListFilesResult {
+  entries: FileEntry[];
+}
+
+export interface ReadFileResult {
+  content_base64: string;
+  size_bytes: number;
 }

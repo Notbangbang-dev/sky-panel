@@ -15,16 +15,22 @@ import (
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/auth"
 )
 
-type fakeNodeLookup struct {
-	byHash map[string]string
+type nodeAuthEntry struct {
+	nodeID    string
+	token     string
+	expiresAt time.Time
 }
 
-func (f *fakeNodeLookup) NodeIDForTokenHash(tokenHash string) (string, error) {
-	id, ok := f.byHash[tokenHash]
+type fakeNodeLookup struct {
+	byHash map[string]nodeAuthEntry
+}
+
+func (f *fakeNodeLookup) AuthenticateNode(tokenHash string) (string, string, time.Time, error) {
+	e, ok := f.byHash[tokenHash]
 	if !ok {
-		return "", errors.New("unknown token")
+		return "", "", time.Time{}, errors.New("unknown token")
 	}
-	return id, nil
+	return e.nodeID, e.token, e.expiresAt, nil
 }
 
 type fakeSink struct {
@@ -58,8 +64,15 @@ func dialTestServer(t *testing.T, srv *httptest.Server) *websocket.Conn {
 	return conn
 }
 
+func goodLookup() (*fakeNodeLookup, string) {
+	const token = "good-token"
+	return &fakeNodeLookup{byHash: map[string]nodeAuthEntry{
+		hashOf(token): {nodeID: "node-1", token: token, expiresAt: time.Now().Add(time.Hour)},
+	}}, token
+}
+
 func TestHandlerRejectsBadHello(t *testing.T) {
-	lookup := &fakeNodeLookup{byHash: map[string]string{}}
+	lookup := &fakeNodeLookup{byHash: map[string]nodeAuthEntry{}}
 	h := NewHandler(NewRegistry(), lookup, newFakeSink())
 
 	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
@@ -68,7 +81,7 @@ func TestHandlerRejectsBadHello(t *testing.T) {
 	conn := dialTestServer(t, srv)
 	defer conn.Close()
 
-	env, err := Encode(TypeHello, HelloPayload{NodeToken: "not-a-real-token"})
+	env, err := EncodeSigned([]byte("not-a-real-token"), TypeHello, HelloPayload{NodeToken: "not-a-real-token"})
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -83,8 +96,28 @@ func TestHandlerRejectsBadHello(t *testing.T) {
 	}
 }
 
+func TestHandlerRejectsExpiredToken(t *testing.T) {
+	const token = "expired-token"
+	lookup := &fakeNodeLookup{byHash: map[string]nodeAuthEntry{
+		hashOf(token): {nodeID: "node-1", token: token, expiresAt: time.Now().Add(-time.Hour)},
+	}}
+	h := NewHandler(NewRegistry(), lookup, newFakeSink())
+
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+
+	conn := dialTestServer(t, srv)
+	defer conn.Close()
+	sendHello(t, conn, token)
+
+	conn.SetReadDeadline(time.Now().Add(time.Second))
+	if _, _, err := conn.ReadMessage(); err == nil {
+		t.Error("expected connection to be closed after an expired-token hello")
+	}
+}
+
 func TestHandlerRegistersNodeAndDispatchesCommand(t *testing.T) {
-	lookup := &fakeNodeLookup{byHash: map[string]string{hashOf("good-token"): "node-1"}}
+	lookup, token := goodLookup()
 	registry := NewRegistry()
 	h := NewHandler(registry, lookup, newFakeSink())
 
@@ -94,7 +127,7 @@ func TestHandlerRegistersNodeAndDispatchesCommand(t *testing.T) {
 	conn := dialTestServer(t, srv)
 	defer conn.Close()
 
-	sendHello(t, conn, "good-token")
+	sendHello(t, conn, token)
 
 	// Wait for registration by polling (avoids sleeping a fixed amount).
 	waitForCondition(t, func() bool {
@@ -120,12 +153,15 @@ func TestHandlerRegistersNodeAndDispatchesCommand(t *testing.T) {
 	if env.Type != TypeCommand {
 		t.Fatalf("expected command envelope, got %q", env.Type)
 	}
+	if !env.Verify([]byte(token)) {
+		t.Fatal("expected the command envelope sent by the panel to verify against the node's token")
+	}
 	var cmd CommandPayload
 	if err := json.Unmarshal(env.Payload, &cmd); err != nil {
 		t.Fatalf("unmarshal command: %v", err)
 	}
 
-	ackEnv, err := Encode(TypeAck, AckPayload{CommandID: cmd.CommandID, OK: true})
+	ackEnv, err := EncodeSigned([]byte(token), TypeAck, AckPayload{CommandID: cmd.CommandID, OK: true})
 	if err != nil {
 		t.Fatalf("encode ack: %v", err)
 	}
@@ -143,8 +179,40 @@ func TestHandlerRegistersNodeAndDispatchesCommand(t *testing.T) {
 	}
 }
 
+func TestHandlerRejectsAckSignedWithWrongSecret(t *testing.T) {
+	lookup, token := goodLookup()
+	registry := NewRegistry()
+	h := NewHandler(registry, lookup, newFakeSink())
+
+	srv := httptest.NewServer(http.HandlerFunc(h.ServeWS))
+	defer srv.Close()
+
+	conn := dialTestServer(t, srv)
+	defer conn.Close()
+	sendHello(t, conn, token)
+
+	waitForCondition(t, func() bool {
+		_, ok := registry.Get("node-1")
+		return ok
+	})
+
+	forged, err := EncodeSigned([]byte("wrong-secret"), TypeAck, AckPayload{CommandID: "whatever", OK: true})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	if err := conn.WriteJSON(forged); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// The connection should be dropped rather than accepting the forged ack.
+	conn.SetReadDeadline(time.Now().Add(time.Second))
+	if _, _, err := conn.ReadMessage(); err == nil {
+		t.Error("expected connection to be closed after a forged envelope")
+	}
+}
+
 func TestHandlerForwardsHeartbeatToSink(t *testing.T) {
-	lookup := &fakeNodeLookup{byHash: map[string]string{hashOf("good-token"): "node-1"}}
+	lookup, token := goodLookup()
 	sink := newFakeSink()
 	h := NewHandler(NewRegistry(), lookup, sink)
 
@@ -154,9 +222,9 @@ func TestHandlerForwardsHeartbeatToSink(t *testing.T) {
 	conn := dialTestServer(t, srv)
 	defer conn.Close()
 
-	sendHello(t, conn, "good-token")
+	sendHello(t, conn, token)
 
-	hbEnv, err := Encode(TypeHeartbeat, HeartbeatPayload{Containers: []ContainerHeartbeat{
+	hbEnv, err := EncodeSigned([]byte(token), TypeHeartbeat, HeartbeatPayload{Containers: []ContainerHeartbeat{
 		{ServerID: "server-1", Running: true, CPU: 5},
 	}})
 	if err != nil {
@@ -173,7 +241,7 @@ func TestHandlerForwardsHeartbeatToSink(t *testing.T) {
 
 func sendHello(t *testing.T, conn *websocket.Conn, token string) {
 	t.Helper()
-	env, err := Encode(TypeHello, HelloPayload{NodeToken: token})
+	env, err := EncodeSigned([]byte(token), TypeHello, HelloPayload{NodeToken: token})
 	if err != nil {
 		t.Fatalf("encode hello: %v", err)
 	}

@@ -20,30 +20,6 @@ jobs:
       - run: go test ./... -race
         working-directory: panel-api
 
-  node-agent:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: node-agent/go.mod
-      - run: go build ./...
-        working-directory: node-agent
-      - run: go vet ./...
-        working-directory: node-agent
-      - run: go test ./... -race
-        working-directory: node-agent
-
-  skyperf:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo build --release
-        working-directory: skyperf
-      - run: cargo test
-        working-directory: skyperf
-
   web:
     runs-on: ubuntu-latest
     steps:

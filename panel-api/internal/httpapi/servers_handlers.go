@@ -122,8 +122,42 @@ func (d Deps) loadOwnedServer(w http.ResponseWriter, r *http.Request) *models.Se
 	return server
 }
 
+// loadServerWithPermission loads a server and enforces that the caller is
+// its owner, an admin, or a subuser holding requiredPerm on it. Pass "" for
+// requiredPerm to allow any subuser regardless of their specific grants
+// (used for read-only access like GetServer).
+func (d Deps) loadServerWithPermission(w http.ResponseWriter, r *http.Request, requiredPerm string) *models.Server {
+	claims, ok := auth.FromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "missing auth context")
+		return nil
+	}
+
+	server, err := d.Servers.GetByID(pathParam(r, "serverID"))
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "server not found")
+		return nil
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load server")
+		return nil
+	}
+
+	if server.OwnerID == claims.UserID || claims.Role == string(models.RoleAdmin) {
+		return server
+	}
+
+	sub, err := d.Subusers.Get(server.ID, claims.UserID)
+	if err == nil && (requiredPerm == "" || sub.HasPermission(requiredPerm)) {
+		return server
+	}
+
+	writeError(w, http.StatusForbidden, "forbidden", "you do not have access to this server")
+	return nil
+}
+
 func (d Deps) GetServer(w http.ResponseWriter, r *http.Request) {
-	server := d.loadOwnedServer(w, r)
+	server := d.loadServerWithPermission(w, r, "")
 	if server == nil {
 		return
 	}
@@ -148,7 +182,7 @@ type powerActionRequest struct {
 }
 
 func (d Deps) PowerAction(w http.ResponseWriter, r *http.Request) {
-	server := d.loadOwnedServer(w, r)
+	server := d.loadServerWithPermission(w, r, models.PermPower)
 	if server == nil {
 		return
 	}
@@ -178,7 +212,7 @@ type consoleInputRequest struct {
 }
 
 func (d Deps) ConsoleInput(w http.ResponseWriter, r *http.Request) {
-	server := d.loadOwnedServer(w, r)
+	server := d.loadServerWithPermission(w, r, models.PermConsole)
 	if server == nil {
 		return
 	}

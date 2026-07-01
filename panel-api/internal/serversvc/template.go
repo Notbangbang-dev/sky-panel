@@ -56,7 +56,7 @@ func substitute(s string, values map[string]string) string {
 }
 
 // tokenizeCommand splits a startup command string into argv the same way
-// node-agent's container Cmd expects: whitespace-separated, but a
+// sky-daemon's container Cmd expects: whitespace-separated, but a
 // double-quoted span counts as one token (so `-g "daemon off;"` becomes
 // ["-g", "daemon off;"]). The resulting tokens are exec'd directly with no
 // shell involved downstream, so shell metacharacters are inert by

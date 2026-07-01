@@ -11,20 +11,21 @@ import (
 
 var ErrNodeOffline = fmt.Errorf("node is not connected")
 
-// Conn wraps one live node-agent connection: sending commands and matching
+// Conn wraps one live sky-daemon connection: sending commands and matching
 // their async acks back up by command ID.
 type Conn struct {
 	NodeID string
 
 	conn    *websocket.Conn
+	secret  []byte
 	writeMu sync.Mutex
 
 	pendingMu sync.Mutex
 	pending   map[string]chan AckPayload
 }
 
-func newConn(nodeID string, ws *websocket.Conn) *Conn {
-	return &Conn{NodeID: nodeID, conn: ws, pending: make(map[string]chan AckPayload)}
+func newConn(nodeID string, ws *websocket.Conn, secret []byte) *Conn {
+	return &Conn{NodeID: nodeID, conn: ws, secret: secret, pending: make(map[string]chan AckPayload)}
 }
 
 // SendCommand writes cmd to the node and blocks until the matching ack
@@ -42,7 +43,7 @@ func (c *Conn) SendCommand(ctx context.Context, cmd CommandPayload) (AckPayload,
 		c.pendingMu.Unlock()
 	}()
 
-	env, err := Encode(TypeCommand, cmd)
+	env, err := EncodeSigned(c.secret, TypeCommand, cmd)
 	if err != nil {
 		return AckPayload{}, err
 	}

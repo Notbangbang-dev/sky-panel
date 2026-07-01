@@ -12,6 +12,10 @@ import (
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/repo"
 )
 
+// DefaultNodeTokenTTL is how long a freshly (re)issued node token is valid
+// before it must be rotated.
+const DefaultNodeTokenTTL = 90 * 24 * time.Hour
+
 type createNodeRequest struct {
 	Name         string `json:"name"`
 	Address      string `json:"address"`
@@ -23,6 +27,7 @@ type nodeResponse struct {
 	Name         string `json:"name"`
 	Address      string `json:"address"`
 	DockerSocket string `json:"docker_socket"`
+	ExpiresAt    string `json:"expires_at"`
 }
 
 // createNodeResponse additionally carries the plaintext node token, shown
@@ -33,7 +38,9 @@ type createNodeResponse struct {
 }
 
 func toNodeResponse(n *models.Node) nodeResponse {
-	return nodeResponse{ID: n.ID, Name: n.Name, Address: n.Address, DockerSocket: n.DockerSocket}
+	return nodeResponse{
+		ID: n.ID, Name: n.Name, Address: n.Address, DockerSocket: n.DockerSocket, ExpiresAt: n.ExpiresAt.Format(rfc3339),
+	}
 }
 
 func (d Deps) CreateNode(w http.ResponseWriter, r *http.Request) {
@@ -54,13 +61,16 @@ func (d Deps) CreateNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	now := time.Now().UTC()
 	node := &models.Node{
 		ID:           uuid.NewString(),
 		Name:         req.Name,
 		TokenHash:    auth.HashToken(rawToken),
+		Token:        rawToken,
+		ExpiresAt:    now.Add(DefaultNodeTokenTTL),
 		Address:      req.Address,
 		DockerSocket: dockerSocket,
-		CreatedAt:    time.Now().UTC(),
+		CreatedAt:    now,
 	}
 
 	if err := d.Nodes.Create(node); err != nil {
@@ -98,4 +108,35 @@ func (d Deps) DeleteNode(w http.ResponseWriter, r *http.Request) {
 	}
 	d.audit(r, "node.delete", id, "")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// RotateNodeToken issues a fresh token (and expiry) for a node, immediately
+// invalidating the old one. The node's SKY_NODE_TOKEN env/config must be
+// updated with the new value and the daemon restarted.
+func (d Deps) RotateNodeToken(w http.ResponseWriter, r *http.Request) {
+	id := pathParam(r, "nodeID")
+
+	if _, err := d.Nodes.GetByID(id); err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "node not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load node")
+		return
+	}
+
+	rawToken, err := auth.NewOpaqueToken()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to generate node token")
+		return
+	}
+	expiresAt := time.Now().UTC().Add(DefaultNodeTokenTTL)
+
+	if err := d.Nodes.RotateToken(id, auth.HashToken(rawToken), rawToken, expiresAt); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to rotate node token")
+		return
+	}
+	d.audit(r, "node.rotate_token", id, "")
+
+	writeJSON(w, http.StatusOK, map[string]string{"node_token": rawToken, "expires_at": expiresAt.Format(rfc3339)})
 }

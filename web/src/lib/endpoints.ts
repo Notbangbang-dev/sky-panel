@@ -4,8 +4,13 @@ import type {
   CoinResult,
   CreateNodeResult,
   Egg,
+  ListFilesResult,
   Node,
+  Permission,
+  ReadFileResult,
+  RotateNodeTokenResult,
   Server,
+  Subuser,
   TokenPair,
   TotpSetup,
   User,
@@ -37,6 +42,32 @@ export const serversApi = {
     apiRequest<void>(`/api/v1/servers/${id}/console`, { method: "POST", body: { input } }),
 };
 
+export const subusersApi = {
+  list: (serverId: string) => apiRequest<Subuser[]>(`/api/v1/servers/${serverId}/subusers`),
+  add: (serverId: string, username: string, permissions: Permission[]) =>
+    apiRequest<Subuser>(`/api/v1/servers/${serverId}/subusers`, { method: "POST", body: { username, permissions } }),
+  remove: (serverId: string, userId: string) =>
+    apiRequest<void>(`/api/v1/servers/${serverId}/subusers/${userId}`, { method: "DELETE" }),
+};
+
+export const filesApi = {
+  list: (serverId: string, path: string) =>
+    apiRequest<ListFilesResult>(`/api/v1/servers/${serverId}/files?path=${encodeURIComponent(path)}`),
+  read: (serverId: string, path: string) =>
+    apiRequest<ReadFileResult>(`/api/v1/servers/${serverId}/files/content?path=${encodeURIComponent(path)}`),
+  write: (serverId: string, path: string, contentBase64: string) =>
+    apiRequest<void>(`/api/v1/servers/${serverId}/files/content`, {
+      method: "PUT",
+      body: { path, content_base64: contentBase64 },
+    }),
+  rename: (serverId: string, path: string, newPath: string) =>
+    apiRequest<void>(`/api/v1/servers/${serverId}/files/rename`, { method: "POST", body: { path, new_path: newPath } }),
+  remove: (serverId: string, path: string) =>
+    apiRequest<void>(`/api/v1/servers/${serverId}/files?path=${encodeURIComponent(path)}`, { method: "DELETE" }),
+  mkdir: (serverId: string, path: string) =>
+    apiRequest<void>(`/api/v1/servers/${serverId}/files/mkdir`, { method: "POST", body: { path } }),
+};
+
 export const eggsApi = {
   list: () => apiRequest<Egg[]>("/api/v1/eggs"),
 };
@@ -59,6 +90,8 @@ export const adminApi = {
   createNode: (name: string, address: string) =>
     apiRequest<CreateNodeResult>("/api/v1/admin/nodes", { method: "POST", body: { name, address } }),
   deleteNode: (id: string) => apiRequest<void>(`/api/v1/admin/nodes/${id}`, { method: "DELETE" }),
+  rotateNodeToken: (id: string) =>
+    apiRequest<RotateNodeTokenResult>(`/api/v1/admin/nodes/${id}/rotate-token`, { method: "POST" }),
 
   createEgg: (input: { name: string; docker_image: string; startup: string; category?: string; description?: string; stop_command?: string }) =>
     apiRequest<Egg>("/api/v1/admin/eggs", { method: "POST", body: input }),

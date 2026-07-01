@@ -1,12 +1,8 @@
 # Go
 panel-api/bin/
-node-agent/bin/
 *.exe
 *.test
 *.out
-
-# Rust
-skyperf/target/
 
 # Node / web / site
 node_modules/

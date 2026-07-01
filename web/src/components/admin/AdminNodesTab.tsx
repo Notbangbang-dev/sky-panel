@@ -22,6 +22,13 @@ export function AdminNodesTab() {
     },
   });
   const remove = useMutation({ mutationFn: (id: string) => adminApi.deleteNode(id), onSuccess: invalidate });
+  const rotate = useMutation({
+    mutationFn: (id: string) => adminApi.rotateNodeToken(id),
+    onSuccess: (result) => {
+      setIssuedToken(result.node_token);
+      invalidate();
+    },
+  });
 
   return (
     <div>
@@ -61,6 +68,7 @@ export function AdminNodesTab() {
             <th>Name</th>
             <th>Address</th>
             <th>Docker socket</th>
+            <th>Token expires</th>
             <th></th>
           </tr>
         </thead>
@@ -70,7 +78,11 @@ export function AdminNodesTab() {
               <td>{n.name}</td>
               <td className="sp-mono">{n.address}</td>
               <td className="sp-mono">{n.docker_socket}</td>
-              <td>
+              <td className="sp-mono">{new Date(n.expires_at).toLocaleDateString()}</td>
+              <td style={{ display: "flex", gap: 6 }}>
+                <button className="sp-btn sp-btn--sm" onClick={() => rotate.mutate(n.id)}>
+                  Rotate token
+                </button>
                 <button className="sp-btn sp-btn--sm sp-btn--danger" onClick={() => remove.mutate(n.id)}>
                   Delete
                 </button>

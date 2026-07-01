@@ -7,13 +7,19 @@
 #
 # Modes:
 #   panel   installs panel-api + the web UI behind Caddy (automatic HTTPS)
-#   node    installs node-agent + Docker on a game-server VPS
+#   node    installs sky-daemon + Docker on a game-server VPS
 #   all     installs both on a single box (fine for a first, single-node setup)
+#
+# panel-api/web and sky-daemon ship as separate GitHub releases (separate
+# repos, separate version cadence), so each is tracked and updated
+# independently — see sky-panel-update.
 set -euo pipefail
 
 REPO="Notbangbang-dev/sky-panel"
+DAEMON_REPO="Notbangbang-dev/sky-daemon"
 INSTALL_DIR="/opt/sky-panel"
 SERVICE_USER="sky-panel"
+VOLUMES_ROOT="/srv/sky-panel/volumes"
 
 MODE="${1:-}"
 shift || true
@@ -74,29 +80,30 @@ random_secret() {
 }
 
 latest_release_tag() {
-  curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/'
+  local repo="$1"
+  curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/'
 }
 
 download_release_asset() {
-  local tag="$1" asset="$2" dest="$3"
-  curl -fsSL "https://github.com/${REPO}/releases/download/${tag}/${asset}" -o "$dest"
+  local repo="$1" tag="$2" asset="$3" dest="$4"
+  curl -fsSL "https://github.com/${repo}/releases/download/${tag}/${asset}" -o "$dest"
 }
 
 install_panel() {
   require_apt
   local arch tag
   arch="$(detect_arch)"
-  tag="$(latest_release_tag)"
+  tag="$(latest_release_tag "$REPO")"
   [[ -n "$tag" ]] || fail "could not determine the latest sky-panel release"
 
   log "installing panel-api (release ${tag}, linux/${arch})"
   mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/data" "$INSTALL_DIR/web"
   create_service_user
 
-  download_release_asset "$tag" "panel-api-linux-${arch}" "$INSTALL_DIR/bin/panel-api"
+  download_release_asset "$REPO" "$tag" "panel-api-linux-${arch}" "$INSTALL_DIR/bin/panel-api"
   chmod +x "$INSTALL_DIR/bin/panel-api"
 
-  download_release_asset "$tag" "web-dist.tar.gz" "/tmp/sky-panel-web.tar.gz"
+  download_release_asset "$REPO" "$tag" "web-dist.tar.gz" "/tmp/sky-panel-web.tar.gz"
   tar -xzf /tmp/sky-panel-web.tar.gz -C "$INSTALL_DIR/web"
   rm -f /tmp/sky-panel-web.tar.gz
 
@@ -164,31 +171,31 @@ install_node() {
 
   local arch tag
   arch="$(detect_arch)"
-  tag="$(latest_release_tag)"
-  [[ -n "$tag" ]] || fail "could not determine the latest sky-panel release"
+  tag="$(latest_release_tag "$DAEMON_REPO")"
+  [[ -n "$tag" ]] || fail "could not determine the latest sky-daemon release"
 
   install_docker_if_missing
 
-  log "installing node-agent (release ${tag}, linux/${arch})"
-  mkdir -p "$INSTALL_DIR/bin"
-  download_release_asset "$tag" "node-agent-linux-${arch}" "$INSTALL_DIR/bin/node-agent"
-  download_release_asset "$tag" "skyperf-linux-${arch}" "$INSTALL_DIR/bin/skyperf"
-  chmod +x "$INSTALL_DIR/bin/node-agent" "$INSTALL_DIR/bin/skyperf"
+  log "installing sky-daemon (release ${tag}, linux/${arch})"
+  mkdir -p "$INSTALL_DIR/bin" "$VOLUMES_ROOT"
+  download_release_asset "$DAEMON_REPO" "$tag" "sky-daemon-linux-${arch}" "$INSTALL_DIR/bin/sky-daemon"
+  chmod +x "$INSTALL_DIR/bin/sky-daemon"
 
-  cat > "$INSTALL_DIR/node-agent.env" <<EOF
+  cat > "$INSTALL_DIR/sky-daemon.env" <<EOF
 SKY_PANEL_WS_URL=${PANEL_URL}
 SKY_NODE_TOKEN=${NODE_TOKEN}
 SKY_DOCKER_SOCKET=/var/run/docker.sock
+SKY_VOLUMES_ROOT=${VOLUMES_ROOT}
 EOF
-  chmod 600 "$INSTALL_DIR/node-agent.env"
+  chmod 600 "$INSTALL_DIR/sky-daemon.env"
 
-  echo "$tag" > "$INSTALL_DIR/VERSION"
-  install -m 644 "$(dirname "$0")/systemd/sky-node-agent.service" /etc/systemd/system/sky-node-agent.service
+  echo "$tag" > "$INSTALL_DIR/VERSION-daemon"
+  install -m 644 "$(dirname "$0")/systemd/sky-daemon.service" /etc/systemd/system/sky-daemon.service
   install -m 755 "$(dirname "$0")/sky-panel-update" /usr/local/bin/sky-panel-update
   systemctl daemon-reload
-  systemctl enable --now sky-node-agent
+  systemctl enable --now sky-daemon
 
-  log "node-agent installed and connecting to ${PANEL_URL}"
+  log "sky-daemon installed and connecting to ${PANEL_URL}"
 }
 
 require_root

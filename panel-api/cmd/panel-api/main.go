@@ -30,6 +30,7 @@ func main() {
 	eggs := repo.NewEggs(db)
 	servers := repo.NewServers(db)
 	allocations := repo.NewAllocations(db)
+	subusers := repo.NewSubusers(db)
 	ledger := repo.NewLedger(db)
 	afk := repo.NewAFKState(db)
 	dailyRewards := repo.NewDailyRewards(db)
@@ -48,6 +49,7 @@ func main() {
 		Eggs:          eggs,
 		Servers:       servers,
 		Allocations:   allocations,
+		Subusers:      subusers,
 		ServerSvc:     serversvc.NewService(servers, eggs, nodes, allocations, agentRegistry),
 		AgentHub:      agentHandler,
 		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards),

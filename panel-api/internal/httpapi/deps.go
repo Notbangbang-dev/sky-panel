@@ -24,6 +24,7 @@ type Deps struct {
 	Eggs        *repo.Eggs
 	Servers     *repo.Servers
 	Allocations *repo.Allocations
+	Subusers    *repo.Subusers
 	ServerSvc   *serversvc.Service
 	AgentHub    *agenthub.Handler
 	CoinSvc     *coinsvc.Service

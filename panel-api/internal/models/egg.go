@@ -10,13 +10,13 @@ type EggVariable struct {
 }
 
 type Egg struct {
-	ID          string
-	Name        string
-	Category    string
-	Description string
-	DockerImage string
-	Startup     string
-	StopCommand string
-	Variables   []EggVariable
-	CreatedAt   time.Time
+	ID          string        `json:"id"`
+	Name        string        `json:"name"`
+	Category    string        `json:"category"`
+	Description string        `json:"description"`
+	DockerImage string        `json:"docker_image"`
+	Startup     string        `json:"startup"`
+	StopCommand string        `json:"stop_command"`
+	Variables   []EggVariable `json:"variables"`
+	CreatedAt   time.Time     `json:"created_at"`
 }

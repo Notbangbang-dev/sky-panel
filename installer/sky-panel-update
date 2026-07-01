@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Installed to /usr/local/bin/sky-panel-update by install.sh.
-# Pulls the latest GitHub release, verifies checksums, swaps binaries in
-# place, and restarts whichever Sky Panel services are present on this box.
+# panel-api/web and sky-daemon are separate GitHub releases with independent
+# version cadence, so each is checked, downloaded and swapped in place on its
+# own — a box running only "panel" or only "node" simply has nothing to do
+# for the other half.
 set -euo pipefail
 
 REPO="Notbangbang-dev/sky-panel"
+DAEMON_REPO="Notbangbang-dev/sky-daemon"
 INSTALL_DIR="/opt/sky-panel"
-VERSION_FILE="${INSTALL_DIR}/VERSION"
 
 log() { echo "==> $*"; }
 fail() { echo "error: $*" >&2; exit 1; }
@@ -23,39 +25,15 @@ detect_arch() {
 }
 
 current_version() {
-  [[ -f "$VERSION_FILE" ]] && cat "$VERSION_FILE" || echo "unknown"
+  local file="$1"
+  [[ -f "$file" ]] && cat "$file" || echo "unknown"
 }
 
 latest_release_tag() {
-  curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+  local repo="$1"
+  curl -fsSL "https://api.github.com/repos/${repo}/releases/latest" \
     | grep -m1 '"tag_name"' \
     | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/'
-}
-
-ARCH="$(detect_arch)"
-CURRENT="$(current_version)"
-LATEST="$(latest_release_tag)"
-
-[[ -n "$LATEST" ]] || fail "could not reach GitHub to check for a new release"
-
-if [[ "$CURRENT" == "$LATEST" ]]; then
-  log "already up to date (${CURRENT})"
-  exit 0
-fi
-
-log "updating sky-panel: ${CURRENT} -> ${LATEST}"
-
-WORKDIR="$(mktemp -d)"
-trap 'rm -rf "$WORKDIR"' EXIT
-
-BASE_URL="https://github.com/${REPO}/releases/download/${LATEST}"
-curl -fsSL "${BASE_URL}/checksums.txt" -o "${WORKDIR}/checksums.txt"
-
-download_and_verify() {
-  local asset="$1" dest="$2"
-  curl -fsSL "${BASE_URL}/${asset}" -o "$dest"
-  ( cd "$(dirname "$dest")" && grep " ${asset}\$" "${WORKDIR}/checksums.txt" | sha256sum -c - ) \
-    || fail "checksum verification failed for ${asset}"
 }
 
 stop_if_active() {
@@ -66,51 +44,97 @@ start_if_enabled() {
   systemctl is-enabled --quiet "$1" 2>/dev/null && systemctl start "$1" || true
 }
 
-# panel-api is always present on a panel install.
+ARCH="$(detect_arch)"
+UPDATED_ANYTHING=0
+
+# panel-api + web (Notbangbang-dev/sky-panel releases).
 if [[ -f "${INSTALL_DIR}/bin/panel-api" ]]; then
-  log "fetching panel-api"
-  download_and_verify "panel-api-linux-${ARCH}" "${WORKDIR}/panel-api"
+  CURRENT="$(current_version "${INSTALL_DIR}/VERSION")"
+  LATEST="$(latest_release_tag "$REPO")"
+  [[ -n "$LATEST" ]] || fail "could not reach GitHub to check for a new sky-panel release"
 
-  log "fetching web assets"
-  download_and_verify "web-dist.tar.gz" "${WORKDIR}/web-dist.tar.gz"
+  if [[ "$CURRENT" == "$LATEST" ]]; then
+    log "panel-api/web already up to date (${CURRENT})"
+  else
+    log "updating panel-api/web: ${CURRENT} -> ${LATEST}"
+    WORKDIR="$(mktemp -d)"
+    BASE_URL="https://github.com/${REPO}/releases/download/${LATEST}"
+    curl -fsSL "${BASE_URL}/checksums.txt" -o "${WORKDIR}/checksums.txt"
 
-  stop_if_active sky-panel
+    download_and_verify() {
+      local asset="$1" dest="$2"
+      curl -fsSL "${BASE_URL}/${asset}" -o "$dest"
+      ( cd "$(dirname "$dest")" && grep " ${asset}\$" "${WORKDIR}/checksums.txt" | sha256sum -c - ) \
+        || fail "checksum verification failed for ${asset}"
+    }
 
-  cp "${INSTALL_DIR}/bin/panel-api" "${INSTALL_DIR}/bin/panel-api.bak"
-  install -m 755 "${WORKDIR}/panel-api" "${INSTALL_DIR}/bin/panel-api"
+    download_and_verify "panel-api-linux-${ARCH}" "${WORKDIR}/panel-api"
+    download_and_verify "web-dist.tar.gz" "${WORKDIR}/web-dist.tar.gz"
 
-  rm -rf "${INSTALL_DIR}/web.new"
-  mkdir -p "${INSTALL_DIR}/web.new"
-  tar -xzf "${WORKDIR}/web-dist.tar.gz" -C "${INSTALL_DIR}/web.new"
-  rm -rf "${INSTALL_DIR}/web.bak"
-  mv "${INSTALL_DIR}/web" "${INSTALL_DIR}/web.bak"
-  mv "${INSTALL_DIR}/web.new" "${INSTALL_DIR}/web"
+    stop_if_active sky-panel
 
-  start_if_enabled sky-panel
+    cp "${INSTALL_DIR}/bin/panel-api" "${INSTALL_DIR}/bin/panel-api.bak"
+    install -m 755 "${WORKDIR}/panel-api" "${INSTALL_DIR}/bin/panel-api"
+
+    rm -rf "${INSTALL_DIR}/web.new"
+    mkdir -p "${INSTALL_DIR}/web.new"
+    tar -xzf "${WORKDIR}/web-dist.tar.gz" -C "${INSTALL_DIR}/web.new"
+    rm -rf "${INSTALL_DIR}/web.bak"
+    mv "${INSTALL_DIR}/web" "${INSTALL_DIR}/web.bak"
+    mv "${INSTALL_DIR}/web.new" "${INSTALL_DIR}/web"
+
+    start_if_enabled sky-panel
+    rm -rf "$WORKDIR"
+
+    echo "$LATEST" > "${INSTALL_DIR}/VERSION"
+    log "panel-api/web updated to ${LATEST}"
+    UPDATED_ANYTHING=1
+
+    echo
+    echo "--- sky-panel changelog ---"
+    curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/CHANGELOG.md" \
+      | awk "/^## \[/{if (seen) exit; seen=1} seen" \
+      || echo "(could not fetch changelog — see https://github.com/${REPO}/releases/tag/${LATEST})"
+  fi
 fi
 
-# node-agent is only present on a node install.
-if [[ -f "${INSTALL_DIR}/bin/node-agent" ]]; then
-  log "fetching node-agent"
-  download_and_verify "node-agent-linux-${ARCH}" "${WORKDIR}/node-agent"
-  log "fetching skyperf"
-  download_and_verify "skyperf-linux-${ARCH}" "${WORKDIR}/skyperf"
+# sky-daemon (Notbangbang-dev/sky-daemon releases).
+if [[ -f "${INSTALL_DIR}/bin/sky-daemon" ]]; then
+  CURRENT="$(current_version "${INSTALL_DIR}/VERSION-daemon")"
+  LATEST="$(latest_release_tag "$DAEMON_REPO")"
+  [[ -n "$LATEST" ]] || fail "could not reach GitHub to check for a new sky-daemon release"
 
-  stop_if_active sky-node-agent
+  if [[ "$CURRENT" == "$LATEST" ]]; then
+    log "sky-daemon already up to date (${CURRENT})"
+  else
+    log "updating sky-daemon: ${CURRENT} -> ${LATEST}"
+    WORKDIR="$(mktemp -d)"
+    BASE_URL="https://github.com/${DAEMON_REPO}/releases/download/${LATEST}"
+    curl -fsSL "${BASE_URL}/checksums.txt" -o "${WORKDIR}/checksums.txt"
 
-  cp "${INSTALL_DIR}/bin/node-agent" "${INSTALL_DIR}/bin/node-agent.bak"
-  install -m 755 "${WORKDIR}/node-agent" "${INSTALL_DIR}/bin/node-agent"
-  cp "${INSTALL_DIR}/bin/skyperf" "${INSTALL_DIR}/bin/skyperf.bak"
-  install -m 755 "${WORKDIR}/skyperf" "${INSTALL_DIR}/bin/skyperf"
+    asset="sky-daemon-linux-${ARCH}"
+    curl -fsSL "${BASE_URL}/${asset}" -o "${WORKDIR}/sky-daemon"
+    ( cd "$WORKDIR" && grep " ${asset}\$" checksums.txt | sha256sum -c - ) \
+      || fail "checksum verification failed for ${asset}"
 
-  start_if_enabled sky-node-agent
+    stop_if_active sky-daemon
+
+    cp "${INSTALL_DIR}/bin/sky-daemon" "${INSTALL_DIR}/bin/sky-daemon.bak"
+    install -m 755 "${WORKDIR}/sky-daemon" "${INSTALL_DIR}/bin/sky-daemon"
+
+    start_if_enabled sky-daemon
+    rm -rf "$WORKDIR"
+
+    echo "$LATEST" > "${INSTALL_DIR}/VERSION-daemon"
+    log "sky-daemon updated to ${LATEST}"
+    UPDATED_ANYTHING=1
+
+    echo
+    echo "--- sky-daemon changelog ---"
+    curl -fsSL "https://raw.githubusercontent.com/${DAEMON_REPO}/main/CHANGELOG.md" \
+      | awk "/^## \[/{if (seen) exit; seen=1} seen" \
+      || echo "(could not fetch changelog — see https://github.com/${DAEMON_REPO}/releases/tag/${LATEST})"
+  fi
 fi
 
-echo "$LATEST" > "$VERSION_FILE"
-log "updated to ${LATEST}"
-
-echo
-echo "--- changelog ---"
-curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/CHANGELOG.md" \
-  | awk "/^## \[/{if (seen) exit; seen=1} seen" \
-  || echo "(could not fetch changelog — see https://github.com/${REPO}/releases/tag/${LATEST})"
+[[ "$UPDATED_ANYTHING" -eq 1 ]] || log "everything already up to date"

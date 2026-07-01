@@ -28,29 +28,6 @@ jobs:
           GOOS=linux GOARCH=amd64 go build -o ../dist/panel-api-linux-amd64 ./cmd/panel-api
           GOOS=linux GOARCH=arm64 go build -o ../dist/panel-api-linux-arm64 ./cmd/panel-api
 
-      - name: Build node-agent (linux/amd64, linux/arm64)
-        working-directory: node-agent
-        env:
-          CGO_ENABLED: 0
-        run: |
-          GOOS=linux GOARCH=amd64 go build -o ../dist/node-agent-linux-amd64 ./cmd/node-agent
-          GOOS=linux GOARCH=arm64 go build -o ../dist/node-agent-linux-arm64 ./cmd/node-agent
-
-      - name: Build skyperf (linux/amd64, linux/arm64)
-        uses: houseabsolute/actions-rust-cross@v1
-        with:
-          command: build
-          target: x86_64-unknown-linux-gnu
-          args: --release --manifest-path skyperf/Cargo.toml
-      - run: cp skyperf/target/x86_64-unknown-linux-gnu/release/skyperf dist/skyperf-linux-amd64
-
-      - uses: houseabsolute/actions-rust-cross@v1
-        with:
-          command: build
-          target: aarch64-unknown-linux-gnu
-          args: --release --manifest-path skyperf/Cargo.toml
-      - run: cp skyperf/target/aarch64-unknown-linux-gnu/release/skyperf dist/skyperf-linux-arm64
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22

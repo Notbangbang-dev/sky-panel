@@ -3,8 +3,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { serversApi } from "../lib/endpoints";
 import { useTopic } from "../lib/useTopic";
+import { useAuthStore } from "../lib/authStore";
 import { Console } from "../components/Console";
 import { StatusBadge } from "../components/StatusBadge";
+import { FilesTab } from "../components/server/FilesTab";
+import { SharingTab } from "../components/server/SharingTab";
 import type { ContainerHeartbeat } from "../types/api";
 
 interface ConsoleLine {
@@ -13,12 +16,20 @@ interface ConsoleLine {
   message: string;
 }
 
+const TABS = ["Console", "Files", "Sharing"] as const;
+type Tab = (typeof TABS)[number];
+
 export function ServerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
 
   const { data: server } = useQuery({ queryKey: ["servers", id], queryFn: () => serversApi.get(id!), enabled: !!id });
+
+  const canManageSharing = !!server && !!user && (server.owner_id === user.id || user.role === "admin");
+  const visibleTabs = TABS.filter((t) => t !== "Sharing" || canManageSharing);
+  const [tab, setTab] = useState<Tab>("Console");
 
   const [lines, setLines] = useState<string[]>([]);
   const [stats, setStats] = useState<ContainerHeartbeat | null>(null);
@@ -74,9 +85,26 @@ export function ServerDetailPage() {
         <StatCard label="Net TX" value={stats ? `${(stats.net_tx_bytes / 1024).toFixed(1)}KB` : "—"} />
       </div>
 
-      <div className="sp-surface" style={{ height: 420, padding: 12 }}>
-        <Console lines={lines} onInput={sendInput} />
+      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        {visibleTabs.map((t) => (
+          <button
+            key={t}
+            className="sp-btn sp-btn--sm"
+            style={t === tab ? { background: "var(--sp-accent)", color: "var(--sp-accent-text)" } : undefined}
+            onClick={() => setTab(t)}
+          >
+            {t}
+          </button>
+        ))}
       </div>
+
+      {tab === "Console" && (
+        <div className="sp-surface" style={{ height: 420, padding: 12 }}>
+          <Console lines={lines} onInput={sendInput} />
+        </div>
+      )}
+      {tab === "Files" && <FilesTab serverId={id!} />}
+      {tab === "Sharing" && canManageSharing && <SharingTab serverId={id!} />}
     </div>
   );
 }

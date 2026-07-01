@@ -49,6 +49,17 @@ func NewRouter(d Deps) http.Handler {
 				r.Delete("/{serverID}", d.DeleteServer)
 				r.Post("/{serverID}/power", d.PowerAction)
 				r.Post("/{serverID}/console", d.ConsoleInput)
+
+				r.Get("/{serverID}/subusers", d.ListSubusers)
+				r.Post("/{serverID}/subusers", d.AddSubuser)
+				r.Delete("/{serverID}/subusers/{userID}", d.RemoveSubuser)
+
+				r.Get("/{serverID}/files", d.ListFiles)
+				r.Get("/{serverID}/files/content", d.ReadFile)
+				r.Put("/{serverID}/files/content", d.WriteFile)
+				r.Post("/{serverID}/files/rename", d.RenameFile)
+				r.Delete("/{serverID}/files", d.DeleteFile)
+				r.Post("/{serverID}/files/mkdir", d.Mkdir)
 			})
 
 			r.Get("/eggs", d.ListEggs)
@@ -72,6 +83,7 @@ func NewRouter(d Deps) http.Handler {
 					r.Get("/", d.ListNodes)
 					r.Post("/", d.CreateNode)
 					r.Delete("/{nodeID}", d.DeleteNode)
+					r.Post("/{nodeID}/rotate-token", d.RotateNodeToken)
 				})
 				r.Route("/admin/eggs", func(r chi.Router) {
 					r.Post("/", d.CreateEgg)

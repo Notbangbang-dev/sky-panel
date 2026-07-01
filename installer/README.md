@@ -21,7 +21,8 @@ on that VPS:
 sudo bash install.sh node --panel-url wss://panel.example.com/agent/ws --node-token <TOKEN>
 ```
 
-This installs Docker (if missing) and `node-agent`, which dials out to the
+This installs Docker (if missing) and [`sky-daemon`](https://github.com/Notbangbang-dev/sky-daemon)
+(a separate Rust binary, released from its own repo), which dials out to the
 panel — no inbound ports need to be opened on the node.
 
 ## Single-box setup
@@ -38,7 +39,9 @@ the same box.
 
 Every install places `sky-panel-update` at `/usr/local/bin`. Run it any time
 to pull the latest release, verify checksums, and restart whichever Sky
-Panel services are present on that box:
+Panel services are present on that box. panel-api/web and sky-daemon are
+separate releases with independent version numbers, so a panel-only or
+node-only box just updates the half it has installed:
 
 ```bash
 sudo sky-panel-update
