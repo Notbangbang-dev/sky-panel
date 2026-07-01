@@ -2,18 +2,21 @@
 
 Targets Ubuntu/Debian VPS hosts.
 
+Each command is a single line — pipe the installer straight into `bash` so
+there's nothing to copy wrong. (Downloading it to a file and running it in a
+second step also works, but is easy to fumble into one mangled line.)
+
 ## Install the panel (control plane + web UI)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Notbangbang-dev/sky-panel/main/installer/install.sh -o install.sh
-sudo bash install.sh panel --domain panel.example.com
+curl -fsSL https://raw.githubusercontent.com/Notbangbang-dev/sky-panel/main/installer/install.sh | sudo bash -s -- panel --domain panel.example.com
 ```
 
 Caddy is installed automatically and gets you HTTPS for free. Visit the
 domain and register — the first account created becomes admin.
 
-Don't have a domain pointed at the box yet? Omit `--domain` entirely —
-Caddy serves plain HTTP instead of trying (and failing) to get a
+Don't have a domain pointed at the box yet? Drop `--domain panel.example.com`
+entirely — Caddy serves plain HTTP instead of trying (and failing) to get a
 certificate for a domain it can't verify. You can always re-run the
 installer later once you do have one; it's safe to run more than once (see
 [Updating](#updating)).
@@ -24,7 +27,7 @@ From the admin console, create a node to get its one-time node token, then
 on that VPS:
 
 ```bash
-sudo bash install.sh node --panel-url wss://panel.example.com/agent/ws --node-token <TOKEN>
+curl -fsSL https://raw.githubusercontent.com/Notbangbang-dev/sky-panel/main/installer/install.sh | sudo bash -s -- node --panel-url wss://panel.example.com/agent/ws --node-token <TOKEN>
 ```
 
 This installs Docker (if missing) and [`sky-daemon`](https://github.com/Notbangbang-dev/sky-daemon)
@@ -34,7 +37,7 @@ panel — no inbound ports need to be opened on the node.
 ## Single-box setup
 
 ```bash
-sudo bash install.sh all --domain panel.example.com --node-token <TOKEN>
+curl -fsSL https://raw.githubusercontent.com/Notbangbang-dev/sky-panel/main/installer/install.sh | sudo bash -s -- all --domain panel.example.com --node-token <TOKEN>
 ```
 
 Run it once without `--node-token` to get the panel up, create a node from

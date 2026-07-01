@@ -12,20 +12,21 @@ export function DashboardPage() {
 
   return (
     <div>
+      <p className="sp-kicker">Overview</p>
       <h1 className="sp-page-title">Welcome back, {user?.username}.</h1>
 
       <div className="sp-grid sp-grid--cards" style={{ marginBottom: 24 }}>
         <div className="sp-surface sp-card">
-          <p className="sp-label">Servers</p>
-          <p style={{ fontFamily: "var(--sp-font-display)", fontSize: 36 }}>{servers?.length ?? 0}</p>
+          <p className="sp-stat__label">Servers</p>
+          <p className="sp-stat__value">{servers?.length ?? 0}</p>
         </div>
         <div className="sp-surface sp-card">
-          <p className="sp-label">Running now</p>
-          <p style={{ fontFamily: "var(--sp-font-display)", fontSize: 36, color: "var(--sp-accent)" }}>{running}</p>
+          <p className="sp-stat__label">Running now</p>
+          <p className="sp-stat__value" style={{ color: "var(--sp-accent)" }}>{running}</p>
         </div>
         <div className="sp-surface sp-card">
-          <p className="sp-label">Coin balance</p>
-          <p style={{ fontFamily: "var(--sp-font-display)", fontSize: 36 }}>{user?.coins.toLocaleString()}</p>
+          <p className="sp-stat__label">Coin balance</p>
+          <p className="sp-stat__value">{user?.coins.toLocaleString()}</p>
         </div>
       </div>
 

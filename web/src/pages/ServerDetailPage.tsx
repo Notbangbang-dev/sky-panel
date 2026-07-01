@@ -112,8 +112,8 @@ export function ServerDetailPage() {
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="sp-surface sp-card">
-      <p className="sp-label">{label}</p>
-      <p className="sp-mono" style={{ fontSize: 22 }}>
+      <p className="sp-stat__label">{label}</p>
+      <p className="sp-mono" style={{ fontSize: 26, fontVariantNumeric: "tabular-nums" }}>
         {value}
       </p>
     </div>

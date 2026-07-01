@@ -107,19 +107,22 @@ export default function DocsPage() {
           </Section>
 
           <Section id="installing" title="Installing">
-            <p>The installer supports three modes, run from a fresh Ubuntu/Debian box:</p>
-            <p className="font-mono text-text">panel — the control plane + web UI, behind Caddy for automatic HTTPS</p>
-            <Code>{`curl -fsSL https://raw.githubusercontent.com/Notbangbang-dev/sky-panel/main/installer/install.sh -o install.sh
-sudo bash install.sh panel --domain panel.example.com`}</Code>
             <p>
-              If you don&apos;t have a domain pointed at the box yet, just omit <code>--domain</code> — Caddy serves
-              plain HTTP instead of trying (and failing) to get a certificate for a domain it can&apos;t verify.
+              The installer supports three modes, run from a fresh Ubuntu/Debian box. Each is a single command —
+              pipe the script straight into <code>bash</code> so there&apos;s nothing to copy wrong:
             </p>
-            <p className="font-mono text-text">node — sky-daemon + Docker, on a game-server box</p>
+            <p className="font-mono text-text">panel — the control plane + web UI, behind Caddy for automatic HTTPS</p>
+            <Code>{`curl -fsSL https://raw.githubusercontent.com/Notbangbang-dev/sky-panel/main/installer/install.sh | sudo bash -s -- panel --domain panel.example.com`}</Code>
+            <p>
+              If you don&apos;t have a domain pointed at the box yet, just drop <code>--domain panel.example.com</code>{" "}
+              — Caddy serves plain HTTP instead of trying (and failing) to get a certificate for a domain it
+              can&apos;t verify.
+            </p>
+            <p className="font-mono text-text">node — the daemon + Docker, on a game-server box</p>
             <p>Create a node from the admin console first to get its one-time token, then:</p>
-            <Code>{`curl -fsSL https://raw.githubusercontent.com/Notbangbang-dev/sky-panel/main/installer/install.sh -o install.sh
-sudo bash install.sh node --panel-url wss://panel.example.com/agent/ws --node-token <TOKEN>`}</Code>
-            <p className="font-mono text-text">all — both, on a single box (fine for a first setup)</p>
+            <Code>{`curl -fsSL https://raw.githubusercontent.com/Notbangbang-dev/sky-panel/main/installer/install.sh | sudo bash -s -- node --panel-url wss://panel.example.com/agent/ws --node-token <TOKEN>`}</Code>
+            <p className="font-mono text-text">all — both on a single box (fine for a first setup)</p>
+            <Code>{`curl -fsSL https://raw.githubusercontent.com/Notbangbang-dev/sky-panel/main/installer/install.sh | sudo bash -s -- all --domain panel.example.com --node-token <TOKEN>`}</Code>
             <p>Register the first account once the panel is up — it automatically becomes an admin.</p>
           </Section>
 

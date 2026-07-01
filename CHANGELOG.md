@@ -2,6 +2,17 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] - 2026-07-01
+
+### 🚀 Improvements
+
+- A ground-up visual refresh of the panel UI, still strictly black-and-white and still over the animated node-mesh background — but with a proper "control instrument" design language: layered precision-panel surfaces, registration-mark corner ticks on cards, a monospace spec-sheet voice for labels, an accent bar on the active nav item, refined tables/inputs/buttons with real focus states, and an orchestrated fade-in on every page.
+- The marketing site got the same treatment: a stronger hero with an animated sweep line, a spec strip, cohesive corner-ticked feature cards, refreshed copy for the v0.3 feature set, and a new closing call-to-action — all working in both light and dark.
+
+### 🛠 Fixes
+
+- The install commands in the docs and installer README are now single-line (`curl … | sudo bash -s -- …`) so they can't be accidentally pasted as one mangled line — the previous download-then-run two-liner silently broke when the newline was dropped on paste.
+
 ## [0.3.1] - 2026-07-01
 
 ### 🛠 Fixes

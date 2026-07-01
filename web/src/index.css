@@ -15,6 +15,12 @@
   --sp-font-body: "IBM Plex Sans", -apple-system, sans-serif;
   --sp-font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
+  /* Derived tokens — layered depth for the "precision panel" look. */
+  --sp-hairline: color-mix(in srgb, var(--sp-text) 10%, transparent);
+  --sp-elevate: color-mix(in srgb, var(--sp-text) 4%, transparent);
+  --sp-panel-shadow: 0 1px 0 color-mix(in srgb, var(--sp-text) 6%, transparent) inset,
+    0 24px 48px -28px rgba(0, 0, 0, 0.7);
+
   color-scheme: dark;
 }
 
@@ -36,6 +42,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #root {
@@ -104,16 +111,22 @@ button {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  opacity: 0.035;
+  opacity: 0.04;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
+/* Precision panel: a layered surface with an inset top-highlight and a
+   soft drop shadow so it reads as a lit screen rather than a flat box. */
 .sp-surface {
-  background: color-mix(in srgb, var(--sp-surface) 88%, transparent);
+  position: relative;
+  background:
+    linear-gradient(180deg, var(--sp-elevate), transparent 120px),
+    color-mix(in srgb, var(--sp-surface) 90%, transparent);
   border: 1px solid var(--sp-surface-border);
   border-radius: var(--sp-radius);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--sp-panel-shadow);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -124,13 +137,24 @@ button {
   }
 }
 
+@keyframes sp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* ---------- App shell ---------- */
 
 .sp-shell {
   position: relative;
   z-index: 2;
   display: grid;
-  grid-template-columns: 236px 1fr;
+  grid-template-columns: 240px 1fr;
   min-height: 100vh;
   gap: 16px;
   padding: 16px;
@@ -146,6 +170,7 @@ button {
 .sp-shell__content {
   flex: 1;
   min-width: 0;
+  animation: sp-rise 0.4s ease both;
 }
 
 /* ---------- Sidebar ---------- */
@@ -160,20 +185,23 @@ button {
 .sp-sidebar__brand {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  padding: 6px 10px 22px;
+  gap: 7px;
+  padding: 6px 10px 20px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--sp-hairline);
 }
 
 .sp-sidebar__mark {
   font-family: var(--sp-font-display);
-  font-size: 22px;
+  font-size: 24px;
   letter-spacing: 0.04em;
+  line-height: 1;
 }
 
 .sp-sidebar__mark-sub {
   font-family: var(--sp-font-mono);
-  font-size: 10px;
-  letter-spacing: 0.22em;
+  font-size: 9px;
+  letter-spacing: 0.32em;
   color: var(--sp-text-muted);
 }
 
@@ -185,7 +213,7 @@ button {
 
 .sp-sidebar__divider {
   height: 1px;
-  background: var(--sp-surface-border);
+  background: var(--sp-hairline);
   margin: 14px 6px;
 }
 
@@ -199,12 +227,12 @@ button {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 11px;
   padding: 9px 12px;
   border-radius: calc(var(--sp-radius) - 2px);
   font-size: 13px;
   letter-spacing: 0.01em;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, padding-left 0.15s ease;
 }
 
 .sp-sidebar__link-inner:hover {
@@ -216,19 +244,32 @@ button {
   color: var(--sp-text);
 }
 
+/* Accent bar on the active nav item — a small control-panel indicator. */
+.sp-sidebar__link-inner.is-active::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--sp-accent);
+}
+
 .sp-sidebar__glyph {
   font-size: 11px;
   width: 14px;
   text-align: center;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .sp-sidebar__indicator {
   position: absolute;
   inset: 0;
   border-radius: calc(var(--sp-radius) - 2px);
-  background: color-mix(in srgb, var(--sp-text) 10%, transparent);
-  border: 1px solid var(--sp-surface-border);
+  background: color-mix(in srgb, var(--sp-text) 9%, transparent);
+  border: 1px solid var(--sp-hairline);
   z-index: -1;
 }
 
@@ -252,11 +293,17 @@ button {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 12px;
+  padding: 6px 13px;
   border-radius: 999px;
   border: 1px solid var(--sp-surface-border);
+  font-family: var(--sp-font-mono);
   font-size: 13px;
   cursor: default;
+  transition: border-color 0.15s ease;
+}
+
+.sp-coin-ticker:hover {
+  border-color: var(--sp-text-muted);
 }
 
 .sp-coin-ticker__glyph {
@@ -266,13 +313,13 @@ button {
 .sp-topbar__user {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   font-size: 13px;
 }
 
 .sp-topbar__avatar {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -282,6 +329,7 @@ button {
   font-family: var(--sp-font-mono);
   font-weight: 600;
   font-size: 12px;
+  box-shadow: 0 0 0 1px var(--sp-surface-border), 0 0 0 4px color-mix(in srgb, var(--sp-accent) 12%, transparent);
 }
 
 /* ---------- Form controls / buttons ---------- */
@@ -298,13 +346,14 @@ button {
   font-size: 13px;
   font-family: inherit;
   outline: none;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .sp-input:focus,
 .sp-select:focus,
 .sp-textarea:focus {
   border-color: var(--sp-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sp-accent) 16%, transparent);
 }
 
 .sp-textarea {
@@ -314,10 +363,12 @@ button {
 
 .sp-label {
   display: block;
-  font-size: 12px;
+  font-family: var(--sp-font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
   color: var(--sp-text-muted);
   margin-bottom: 6px;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.08em;
 }
 
 .sp-field {
@@ -336,11 +387,17 @@ button {
   color: var(--sp-text);
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease, box-shadow 0.15s ease;
 }
 
 .sp-btn:hover {
   background: color-mix(in srgb, var(--sp-text) 8%, transparent);
+  border-color: var(--sp-text-muted);
+}
+
+.sp-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sp-accent) 30%, transparent);
 }
 
 .sp-btn:active {
@@ -353,22 +410,25 @@ button {
 }
 
 .sp-btn--primary {
-  background: var(--sp-accent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sp-accent) 92%, white), var(--sp-accent));
   color: var(--sp-accent-text);
   border-color: transparent;
+  font-weight: 500;
 }
 
 .sp-btn--primary:hover {
-  background: color-mix(in srgb, var(--sp-accent) 88%, white);
+  background: color-mix(in srgb, var(--sp-accent) 90%, white);
+  box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--sp-accent) 60%, transparent);
 }
 
 .sp-btn--danger {
-  border-color: #7a3030;
+  border-color: color-mix(in srgb, #ff6b6b 40%, var(--sp-surface-border));
   color: #ff9b9b;
 }
 
 .sp-btn--danger:hover {
-  background: rgba(255, 90, 90, 0.1);
+  background: rgba(255, 90, 90, 0.12);
+  border-color: #ff9b9b;
 }
 
 .sp-btn--sm {
@@ -382,26 +442,101 @@ button {
   margin: 8px 0;
 }
 
+/* ---------- Cards ---------- */
+
 .sp-card {
   padding: 22px;
 }
 
+/* Registration-mark corner ticks — a diagonal (top-left / bottom-right)
+   pair, the panel's signature "instrument" detail. Purely decorative. */
+.sp-card::before,
+.sp-card::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  pointer-events: none;
+  opacity: 0.5;
+  color: var(--sp-text-muted);
+}
+.sp-card::before {
+  top: 9px;
+  left: 9px;
+  border-top: 1px solid currentColor;
+  border-left: 1px solid currentColor;
+}
+.sp-card::after {
+  bottom: 9px;
+  right: 9px;
+  border-bottom: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+}
+
+a.sp-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+}
+
+a.sp-card:hover {
+  border-color: var(--sp-text-muted);
+  transform: translateY(-2px);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--sp-text) 8%, transparent) inset,
+    0 32px 56px -30px rgba(0, 0, 0, 0.8);
+}
+
+/* ---------- Stat cards ---------- */
+
+.sp-stat__label {
+  font-family: var(--sp-font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sp-text-muted);
+  margin: 0 0 10px;
+}
+
+.sp-stat__value {
+  font-family: var(--sp-font-display);
+  font-size: 40px;
+  line-height: 1;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Badges ---------- */
+
 .sp-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
+  gap: 6px;
+  padding: 3px 10px;
   border-radius: 999px;
   font-size: 11px;
   font-family: var(--sp-font-mono);
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
   border: 1px solid var(--sp-surface-border);
   text-transform: uppercase;
 }
 
+.sp-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.9;
+}
+
 .sp-badge--running {
   color: var(--sp-accent);
-  border-color: var(--sp-accent);
+  border-color: color-mix(in srgb, var(--sp-accent) 45%, var(--sp-surface-border));
+}
+
+.sp-badge--running::before {
+  box-shadow: 0 0 8px var(--sp-accent);
 }
 
 .sp-badge--offline {
@@ -410,7 +545,7 @@ button {
 
 .sp-badge--errored {
   color: #ff9b9b;
-  border-color: #7a3030;
+  border-color: color-mix(in srgb, #ff6b6b 40%, var(--sp-surface-border));
 }
 
 .sp-grid {
@@ -422,10 +557,24 @@ button {
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 }
 
-.sp-page-title {
-  font-size: 30px;
-  margin-bottom: 18px;
+/* ---------- Page headers ---------- */
+
+.sp-kicker {
+  font-family: var(--sp-font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--sp-text-muted);
+  margin: 0 0 8px;
 }
+
+.sp-page-title {
+  font-size: 32px;
+  margin-bottom: 20px;
+  letter-spacing: 0.01em;
+}
+
+/* ---------- Tables ---------- */
 
 .sp-table {
   width: 100%;
@@ -436,16 +585,33 @@ button {
 .sp-table th {
   text-align: left;
   color: var(--sp-text-muted);
+  font-family: var(--sp-font-mono);
   font-weight: 500;
-  font-size: 12px;
-  padding: 8px 10px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--sp-surface-border);
 }
 
 .sp-table td {
-  padding: 9px 10px;
-  border-bottom: 1px solid var(--sp-surface-border);
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--sp-hairline);
 }
+
+.sp-table tbody tr {
+  transition: background 0.12s ease;
+}
+
+.sp-table tbody tr:hover {
+  background: color-mix(in srgb, var(--sp-text) 4%, transparent);
+}
+
+.sp-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ---------- Auth ---------- */
 
 .sp-auth-page {
   min-height: 100vh;
@@ -459,7 +625,8 @@ button {
 
 .sp-auth-card {
   width: 380px;
-  padding: 32px;
+  padding: 36px;
+  animation: sp-rise 0.45s ease both;
 }
 
 .sp-afk-orb {
@@ -467,12 +634,13 @@ button {
   height: 220px;
   border-radius: 50%;
   border: 1px solid var(--sp-surface-border);
-  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--sp-accent) 12%, transparent), transparent 70%);
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--sp-accent) 14%, transparent), transparent 70%);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  box-shadow: 0 0 60px -20px color-mix(in srgb, var(--sp-accent) 40%, transparent);
 }
 
 .sp-broadcast-slot {
