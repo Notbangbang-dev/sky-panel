@@ -2,6 +2,19 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.1] - 2026-07-01
+
+### 🛠 Fixes
+
+- `sky-panel-update` always failed checksum verification on both panel-api and sky-daemon updates. It downloaded each binary to a local filename (e.g. `panel-api`) that didn't match the name recorded in the release's `checksums.txt` (e.g. `panel-api-linux-amd64`), so `sha256sum -c` could never find the file it was asked to verify. It now looks up the expected hash by the release asset's name and checks it against the actual local filename.
+
+Since `sky-panel-update` doesn't update its own script, this fix only takes effect once you fetch a fresh copy:
+```
+sudo curl -fsSL https://raw.githubusercontent.com/Notbangbang-dev/sky-panel/main/installer/sky-panel-update -o /usr/local/bin/sky-panel-update
+sudo chmod 755 /usr/local/bin/sky-panel-update
+sudo sky-panel-update
+```
+
 ## [0.3.0] - 2026-07-01
 
 ### ✨ New Features

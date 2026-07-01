@@ -64,7 +64,15 @@ if [[ -f "${INSTALL_DIR}/bin/panel-api" ]]; then
     download_and_verify() {
       local asset="$1" dest="$2"
       curl -fsSL "${BASE_URL}/${asset}" -o "$dest"
-      ( cd "$(dirname "$dest")" && grep " ${asset}\$" "${WORKDIR}/checksums.txt" | sha256sum -c - ) \
+      # checksums.txt records hashes against the release asset's own name
+      # (e.g. panel-api-linux-amd64), which usually differs from the local
+      # filename we saved it as (e.g. panel-api) — rewrite the checksum
+      # line to reference the local filename rather than renaming the
+      # downloaded file to match, so sha256sum -c actually finds it.
+      local expected
+      expected="$(grep " ${asset}\$" "${WORKDIR}/checksums.txt" | awk '{print $1}')"
+      [[ -n "$expected" ]] || fail "no checksum entry found for ${asset}"
+      echo "${expected}  $(basename "$dest")" | ( cd "$(dirname "$dest")" && sha256sum -c - ) \
         || fail "checksum verification failed for ${asset}"
     }
 
@@ -114,7 +122,9 @@ if [[ -f "${INSTALL_DIR}/bin/sky-daemon" ]]; then
 
     asset="sky-daemon-linux-${ARCH}"
     curl -fsSL "${BASE_URL}/${asset}" -o "${WORKDIR}/sky-daemon"
-    ( cd "$WORKDIR" && grep " ${asset}\$" checksums.txt | sha256sum -c - ) \
+    expected="$(grep " ${asset}\$" "${WORKDIR}/checksums.txt" | awk '{print $1}')"
+    [[ -n "$expected" ]] || fail "no checksum entry found for ${asset}"
+    echo "${expected}  sky-daemon" | ( cd "$WORKDIR" && sha256sum -c - ) \
       || fail "checksum verification failed for ${asset}"
 
     stop_if_active sky-daemon
