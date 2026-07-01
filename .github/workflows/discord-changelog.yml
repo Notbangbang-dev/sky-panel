@@ -1,0 +1,24 @@
+name: Discord changelog
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    if: ${{ vars.DISCORD_WEBHOOK_URL != '' || secrets.DISCORD_WEBHOOK_URL != '' }}
+    steps:
+      - name: Post release notes to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL || vars.DISCORD_WEBHOOK_URL }}
+          RELEASE_NAME: ${{ github.event.release.name || github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+        run: |
+          # Discord messages cap at 2000 chars; truncate generously with a
+          # pointer back to the full release for anything longer.
+          BODY=$(printf '%s' "$RELEASE_BODY" | head -c 1500)
+          CONTENT=$(printf '**Sky Panel %s**\n%s\n\n> `sudo sky-panel-update`\n%s\n\n*Sky Panel - Deploy. Scale. Dominate.*' "$RELEASE_NAME" "$BODY" "$RELEASE_URL")
+          PAYLOAD=$(jq -n --arg content "$CONTENT" '{content: $content}')
+          curl -fsSL -H "Content-Type: application/json" -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL"

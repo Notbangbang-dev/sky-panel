@@ -1,0 +1,19 @@
+[Unit]
+Description=Sky Panel control plane API
+After=network.target
+
+[Service]
+Type=simple
+User=sky-panel
+Group=sky-panel
+WorkingDirectory=/opt/sky-panel
+EnvironmentFile=/opt/sky-panel/panel-api.env
+ExecStart=/opt/sky-panel/bin/panel-api
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/sky-panel/data
+
+[Install]
+WantedBy=multi-user.target

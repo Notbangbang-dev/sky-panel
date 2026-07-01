@@ -1,0 +1,17 @@
+[Unit]
+Description=Sky Panel node agent
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=/opt/sky-panel/node-agent.env
+ExecStart=/opt/sky-panel/bin/node-agent
+Restart=on-failure
+RestartSec=2
+# The agent talks to the Docker Engine API over /var/run/docker.sock, so it
+# needs to run as a user in the docker group rather than fully unprivileged.
+User=root
+
+[Install]
+WantedBy=multi-user.target
