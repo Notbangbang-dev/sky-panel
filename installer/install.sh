@@ -89,6 +89,15 @@ download_release_asset() {
   curl -fsSL "https://github.com/${repo}/releases/download/${tag}/${asset}" -o "$dest"
 }
 
+# install.sh is designed to be curl'd on its own (see the usage comment at
+# the top) rather than requiring a full clone, so its sibling files
+# (systemd units, sky-panel-update) are fetched straight from the repo at
+# install time instead of being expected to sit next to this script.
+fetch_repo_file() {
+  local path="$1" dest="$2"
+  curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/installer/${path}" -o "$dest"
+}
+
 install_panel() {
   require_apt
   local arch tag
@@ -120,8 +129,10 @@ EOF
   echo "$tag" > "$INSTALL_DIR/VERSION"
   chown -R "$SERVICE_USER":"$SERVICE_USER" "$INSTALL_DIR"
 
-  install -m 644 "$(dirname "$0")/systemd/sky-panel.service" /etc/systemd/system/sky-panel.service
-  install -m 755 "$(dirname "$0")/sky-panel-update" /usr/local/bin/sky-panel-update
+  fetch_repo_file "systemd/sky-panel.service" /etc/systemd/system/sky-panel.service
+  chmod 644 /etc/systemd/system/sky-panel.service
+  fetch_repo_file "sky-panel-update" /usr/local/bin/sky-panel-update
+  chmod 755 /usr/local/bin/sky-panel-update
   systemctl daemon-reload
   systemctl enable --now sky-panel
 
@@ -190,8 +201,10 @@ EOF
   chmod 600 "$INSTALL_DIR/sky-daemon.env"
 
   echo "$tag" > "$INSTALL_DIR/VERSION-daemon"
-  install -m 644 "$(dirname "$0")/systemd/sky-daemon.service" /etc/systemd/system/sky-daemon.service
-  install -m 755 "$(dirname "$0")/sky-panel-update" /usr/local/bin/sky-panel-update
+  fetch_repo_file "systemd/sky-daemon.service" /etc/systemd/system/sky-daemon.service
+  chmod 644 /etc/systemd/system/sky-daemon.service
+  fetch_repo_file "sky-panel-update" /usr/local/bin/sky-panel-update
+  chmod 755 /usr/local/bin/sky-panel-update
   systemctl daemon-reload
   systemctl enable --now sky-daemon
 
