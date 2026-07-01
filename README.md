@@ -2,6 +2,8 @@
 
 A game-server hosting panel. Go + Rust backend, React/TypeScript frontend, real multi-node Docker orchestration, live stats, a coin economy with an AFK page, and a full admin console.
 
+**Website:** https://skypanel-app.vercel.app
+
 ## Stack
 
 - **panel-api** — Go control plane: auth (JWT + TOTP), users/roles, nodes, eggs, servers, coins/ledger, admin, WebSocket hub. SQLite (pure-Go driver, no cgo).
@@ -36,6 +38,9 @@ cd skyperf && cargo build && cargo test
 
 # web
 cd web && npm install && npm run dev
+
+# site
+cd site && npm install && npm run dev
 ```
 
 ## Status
