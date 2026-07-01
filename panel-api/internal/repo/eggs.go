@@ -56,6 +56,19 @@ func (r *Eggs) List() ([]*models.Egg, error) {
 	return out, rows.Err()
 }
 
+func (r *Eggs) Update(e *models.Egg) error {
+	varsJSON, err := json.Marshal(e.Variables)
+	if err != nil {
+		return err
+	}
+	res, err := r.db.Exec(
+		`UPDATE eggs SET name = ?, category = ?, description = ?, docker_image = ?, startup = ?, stop_command = ?, variables_json = ?
+		 WHERE id = ?`,
+		e.Name, e.Category, e.Description, e.DockerImage, e.Startup, e.StopCommand, varsJSON, e.ID,
+	)
+	return checkRowsAffected(res, err)
+}
+
 func (r *Eggs) Delete(id string) error {
 	res, err := r.db.Exec(`DELETE FROM eggs WHERE id = ?`, id)
 	return checkRowsAffected(res, err)

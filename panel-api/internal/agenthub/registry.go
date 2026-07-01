@@ -111,6 +111,12 @@ func (r *Registry) Get(nodeID string) (*Conn, bool) {
 	return c, ok
 }
 
+// Connected reports whether nodeID currently has a live connection.
+func (r *Registry) Connected(nodeID string) bool {
+	_, ok := r.Get(nodeID)
+	return ok
+}
+
 // SendCommand is a convenience wrapper for the common case of looking the
 // node up and sending in one call, with a sensible default timeout.
 func (r *Registry) SendCommand(nodeID string, cmd CommandPayload) (AckPayload, error) {

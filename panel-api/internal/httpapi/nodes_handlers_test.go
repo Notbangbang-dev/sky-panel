@@ -79,6 +79,47 @@ func TestRotateNodeTokenIssuesFreshCredential(t *testing.T) {
 	}
 }
 
+func TestListNodesSlimReflectsConnectionState(t *testing.T) {
+	router, _ := newFullTestRouter(t)
+	ts := httptest.NewServer(router)
+	defer ts.Close()
+
+	adminAccess := registerAndGetAccessToken(t, router, "admin@example.com", "admin")
+	userAccess := registerAndGetAccessToken(t, router, "user@example.com", "regularuser")
+
+	createRec := authedJSON(t, router, http.MethodPost, "/api/v1/admin/nodes", adminAccess, createNodeRequest{
+		Name: "node-1", Address: "10.0.0.5",
+	})
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create node: expected 201, got %d: %s", createRec.Code, createRec.Body.String())
+	}
+	var created createNodeResponse
+	decodeBody(t, createRec, &created)
+
+	listRec := authedRequest(t, router, http.MethodGet, "/api/v1/nodes", userAccess)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list nodes: expected 200, got %d: %s", listRec.Code, listRec.Body.String())
+	}
+	var summaries []nodeSummary
+	decodeBody(t, listRec, &summaries)
+	if len(summaries) != 1 || summaries[0].ID != created.ID || summaries[0].Connected {
+		t.Fatalf("expected one disconnected node before the agent dials in, got %+v", summaries)
+	}
+	if summaries[0].Name != "node-1" || summaries[0].Address != "10.0.0.5" {
+		t.Errorf("unexpected node summary fields: %+v", summaries[0])
+	}
+
+	fakeAgent := connectFakeNodeAgent(t, ts, created.NodeToken)
+	defer fakeAgent.Close()
+	waitForNodeConnected(t, router, adminAccess, created.ID)
+
+	listRec = authedRequest(t, router, http.MethodGet, "/api/v1/nodes", userAccess)
+	decodeBody(t, listRec, &summaries)
+	if len(summaries) != 1 || !summaries[0].Connected {
+		t.Fatalf("expected the node to show connected once the agent dialed in, got %+v", summaries)
+	}
+}
+
 func TestRotateNodeTokenUnknownNode(t *testing.T) {
 	router, _ := newFullTestRouter(t)
 	adminAccess := registerAndGetAccessToken(t, router, "admin@example.com", "admin")

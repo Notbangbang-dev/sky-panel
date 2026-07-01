@@ -11,6 +11,7 @@ interface NavItem {
 const PRIMARY_NAV: NavItem[] = [
   { label: "Dashboard", to: "/", glyph: "◆" },
   { label: "Servers", to: "/servers", glyph: "▣" },
+  { label: "Nodes", to: "/nodes", glyph: "⬢" },
   { label: "Wallet", to: "/wallet", glyph: "◈" },
   { label: "AFK", to: "/afk", glyph: "◐" },
   { label: "Account", to: "/account", glyph: "◎" },

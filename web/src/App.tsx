@@ -10,6 +10,7 @@ import { RegisterPage } from "./pages/RegisterPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ServersListPage } from "./pages/ServersListPage";
 import { ServerDetailPage } from "./pages/ServerDetailPage";
+import { NodesPage } from "./pages/NodesPage";
 import { AfkPage } from "./pages/AfkPage";
 import { WalletPage } from "./pages/WalletPage";
 import { AccountPage } from "./pages/AccountPage";
@@ -41,6 +42,7 @@ function App() {
             <Route path="/" element={<Shell><DashboardPage /></Shell>} />
             <Route path="/servers" element={<Shell><ServersListPage /></Shell>} />
             <Route path="/servers/:id" element={<Shell><ServerDetailPage /></Shell>} />
+            <Route path="/nodes" element={<Shell><NodesPage /></Shell>} />
             <Route path="/wallet" element={<Shell><WalletPage /></Shell>} />
             <Route path="/afk" element={<Shell><AfkPage /></Shell>} />
             <Route path="/account" element={<Shell><AccountPage /></Shell>} />

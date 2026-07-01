@@ -34,6 +34,10 @@ func NewRouter(d Deps) http.Handler {
 			r.Post("/logout", d.Logout)
 		})
 
+		r.Route("/public", func(r chi.Router) {
+			r.Get("/registration-status", d.RegistrationStatus)
+		})
+
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAuth(d.JWT))
 
@@ -64,6 +68,7 @@ func NewRouter(d Deps) http.Handler {
 
 			r.Get("/eggs", d.ListEggs)
 			r.Get("/eggs/{eggID}", d.GetEgg)
+			r.Get("/nodes", d.ListNodesSlim)
 
 			r.Get("/wallet", d.Wallet)
 			r.Post("/afk/heartbeat", d.AFKHeartbeat)
@@ -87,6 +92,7 @@ func NewRouter(d Deps) http.Handler {
 				})
 				r.Route("/admin/eggs", func(r chi.Router) {
 					r.Post("/", d.CreateEgg)
+					r.Put("/{eggID}", d.UpdateEgg)
 					r.Delete("/{eggID}", d.DeleteEgg)
 				})
 

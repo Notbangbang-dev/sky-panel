@@ -4,8 +4,10 @@ import type {
   CoinResult,
   CreateNodeResult,
   Egg,
+  EggVariable,
   ListFilesResult,
   Node,
+  NodeSummary,
   Permission,
   ReadFileResult,
   RotateNodeTokenResult,
@@ -28,6 +30,7 @@ export const authApi = {
   totpSetup: () => apiRequest<TotpSetup>("/api/v1/me/totp/setup", { method: "POST" }),
   totpConfirm: (code: string) => apiRequest<void>("/api/v1/me/totp/confirm", { method: "POST", body: { code } }),
   totpDisable: (code: string) => apiRequest<void>("/api/v1/me/totp/disable", { method: "POST", body: { code } }),
+  registrationStatus: () => apiRequest<{ enabled: boolean }>("/api/v1/public/registration-status", { auth: false }),
 };
 
 export const serversApi = {
@@ -72,11 +75,25 @@ export const eggsApi = {
   list: () => apiRequest<Egg[]>("/api/v1/eggs"),
 };
 
+export const nodesApi = {
+  list: () => apiRequest<NodeSummary[]>("/api/v1/nodes"),
+};
+
 export const coinsApi = {
   wallet: () => apiRequest<Wallet>("/api/v1/wallet"),
   heartbeat: () => apiRequest<CoinResult>("/api/v1/afk/heartbeat", { method: "POST" }),
   claimDaily: () => apiRequest<CoinResult>("/api/v1/daily-reward/claim", { method: "POST" }),
 };
+
+export interface EggInput {
+  name: string;
+  docker_image: string;
+  startup: string;
+  category?: string;
+  description?: string;
+  stop_command?: string;
+  variables?: EggVariable[];
+}
 
 export const adminApi = {
   listUsers: () => apiRequest<User[]>("/api/v1/admin/users"),
@@ -93,8 +110,8 @@ export const adminApi = {
   rotateNodeToken: (id: string) =>
     apiRequest<RotateNodeTokenResult>(`/api/v1/admin/nodes/${id}/rotate-token`, { method: "POST" }),
 
-  createEgg: (input: { name: string; docker_image: string; startup: string; category?: string; description?: string; stop_command?: string }) =>
-    apiRequest<Egg>("/api/v1/admin/eggs", { method: "POST", body: input }),
+  createEgg: (input: EggInput) => apiRequest<Egg>("/api/v1/admin/eggs", { method: "POST", body: input }),
+  updateEgg: (id: string, input: EggInput) => apiRequest<Egg>(`/api/v1/admin/eggs/${id}`, { method: "PUT", body: input }),
   deleteEgg: (id: string) => apiRequest<void>(`/api/v1/admin/eggs/${id}`, { method: "DELETE" }),
 
   getSettings: () => apiRequest<Record<string, string>>("/api/v1/admin/settings"),

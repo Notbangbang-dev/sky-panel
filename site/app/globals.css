@@ -10,6 +10,20 @@
   --sp-signal: #c8ff3d;
 }
 
+/* Black/white by design: light mode inverts the same monochrome palette
+   rather than introducing new hues, so the site reads as one coherent
+   theme in either direction. --sp-signal (the lime accent) stays put —
+   it has enough contrast against both a near-black and a near-white
+   background to not need its own light/dark variant. */
+[data-theme="light"] {
+  --sp-bg: #f7f7f5;
+  --sp-bg-alt: #ffffff;
+  --sp-surface: #ffffff;
+  --sp-surface-border: #dcdcd8;
+  --sp-text: #101114;
+  --sp-text-muted: #63656c;
+}
+
 @theme inline {
   --color-bg: var(--sp-bg);
   --color-surface: var(--sp-surface);
@@ -24,6 +38,10 @@
 
 html {
   color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
 }
 
 body {

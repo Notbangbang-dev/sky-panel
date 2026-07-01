@@ -2,6 +2,23 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - 2026-07-01
+
+### ✨ New Features
+
+- A 10-egg starter catalog ships out of the box: Paper, Vanilla, Spigot, Forge, and Fabric Minecraft servers, a BungeeCord proxy, generic Node.js and Python app runners, a Rust (Facepunch) game server, and a blank custom-image template — all seeded automatically on install.
+- Admins can edit an egg's docker image, startup command, and variables after creation (`PUT /api/v1/admin/eggs/{id}`), not just create/delete it.
+- The create-server form now shows a real node picker (name/address/online status) instead of asking for a raw node ID, and dynamically renders an input for each of the selected egg's editable variables — pre-filled with its default, so e.g. Minecraft's EULA is agreed to by default without a single manual step.
+- A "Nodes" page, visible to every user (not just admins), lists every registered node and whether it's currently connected.
+- Admins can turn public registration on or off from the console; the login/register pages respect it automatically.
+- The marketing site has a full Docs page (architecture, installing, updating, eggs, file manager/sharing, security) and a light/dark theme toggle.
+
+### 🚀 Improvements
+
+- `docker_image`/`startup` are the only required fields when creating an egg now — a blank startup command is valid for images (like the Minecraft ones) that configure themselves entirely from environment variables.
+- Clearer documentation of exactly what `sky-panel-update` checks and does, in both the installer README and the new Docs page.
+- Sharper GitHub descriptions and READMEs for both `sky-panel` and `sky-daemon`.
+
 ## [0.2.1] - 2026-07-01
 
 ### 🛠 Fixes

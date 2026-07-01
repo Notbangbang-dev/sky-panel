@@ -96,6 +96,30 @@ func (d Deps) ListNodes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+type nodeSummary struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Address   string `json:"address"`
+	Connected bool   `json:"connected"`
+}
+
+// ListNodesSlim is the non-admin node listing: just enough for a regular
+// user to pick a node when creating a server (no docker_socket/token/expiry,
+// which stay admin-only via ListNodes).
+func (d Deps) ListNodesSlim(w http.ResponseWriter, r *http.Request) {
+	nodes, err := d.Nodes.List()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to list nodes")
+		return
+	}
+
+	out := make([]nodeSummary, 0, len(nodes))
+	for _, n := range nodes {
+		out = append(out, nodeSummary{ID: n.ID, Name: n.Name, Address: n.Address, Connected: d.AgentHub.Registry.Connected(n.ID)})
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (d Deps) DeleteNode(w http.ResponseWriter, r *http.Request) {
 	id := pathParam(r, "nodeID")
 	if err := d.Nodes.Delete(id); err != nil {

@@ -12,6 +12,12 @@ sudo bash install.sh panel --domain panel.example.com
 Caddy is installed automatically and gets you HTTPS for free. Visit the
 domain and register — the first account created becomes admin.
 
+Don't have a domain pointed at the box yet? Omit `--domain` entirely —
+Caddy serves plain HTTP instead of trying (and failing) to get a
+certificate for a domain it can't verify. You can always re-run the
+installer later once you do have one; it's safe to run more than once (see
+[Updating](#updating)).
+
 ## Install a node (game-server host)
 
 From the admin console, create a node to get its one-time node token, then
@@ -37,12 +43,28 @@ the same box.
 
 ## Updating
 
-Every install places `sky-panel-update` at `/usr/local/bin`. Run it any time
-to pull the latest release, verify checksums, and restart whichever Sky
-Panel services are present on that box. panel-api/web and sky-daemon are
-separate releases with independent version numbers, so a panel-only or
-node-only box just updates the half it has installed:
+Every install places `sky-panel-update` at `/usr/local/bin`. Run it any time:
 
 ```bash
 sudo sky-panel-update
 ```
+
+**What it actually does:** panel-api/web and sky-daemon are separate
+GitHub releases with independent version numbers — the panel doesn't wait
+on a daemon release and vice versa. `sky-panel-update` checks each half
+independently, tracked by two separate version files on disk
+(`/opt/sky-panel/VERSION` for panel-api/web, `/opt/sky-panel/VERSION-daemon`
+for sky-daemon):
+
+1. For each half that's installed on this box, it asks GitHub for that
+   repo's latest release tag and compares it against the recorded version.
+2. If they match, it prints `already up to date` for that half and moves on
+   — no download, no restart.
+3. If they differ, it downloads the new binary (and the web assets, for
+   panel-api), verifies it against the release's published
+   `checksums.txt`, stops the relevant systemd service, swaps the binary
+   in, and restarts it.
+4. It prints that release's changelog entry once the swap is done.
+
+A box running only `panel` or only `node` simply has nothing to do for the
+half it doesn't have installed — it isn't an error, it's just skipped.

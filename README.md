@@ -1,8 +1,8 @@
 # Sky Panel
 
-A game-server hosting panel. Go control plane, Rust daemon, React/TypeScript frontend, real multi-node Docker orchestration, live stats, a coin economy with an AFK page, and a full admin console.
+A self-hosted game-server hosting panel that doesn't get in your way. Go control plane, Rust daemon, React/TypeScript frontend, real multi-node Docker orchestration, a 10-egg starter catalog (Minecraft, generic Node.js/Python, and more), live stats, a coin economy with an AFK page, and a full admin console.
 
-**Website:** https://skypanel-app.vercel.app
+**Website:** https://skypanel-app.vercel.app · **Docs:** https://skypanel-app.vercel.app/docs
 
 ## Stack
 

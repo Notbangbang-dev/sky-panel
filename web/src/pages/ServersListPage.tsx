@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { eggsApi, serversApi } from "../lib/endpoints";
+import { eggsApi, nodesApi, serversApi } from "../lib/endpoints";
 import { StatusBadge } from "../components/StatusBadge";
 import { ApiError } from "../lib/api";
 
@@ -9,16 +9,32 @@ export function ServersListPage() {
   const queryClient = useQueryClient();
   const { data: servers } = useQuery({ queryKey: ["servers"], queryFn: serversApi.list });
   const { data: eggs } = useQuery({ queryKey: ["eggs"], queryFn: eggsApi.list });
+  const { data: nodes } = useQuery({ queryKey: ["nodes"], queryFn: nodesApi.list });
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [nodeId, setNodeId] = useState("");
   const [eggId, setEggId] = useState("");
   const [memoryMb, setMemoryMb] = useState(1024);
+  const [variables, setVariables] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
+  const selectedEgg = useMemo(() => eggs?.find((e) => e.id === eggId), [eggs, eggId]);
+  const editableVariables = selectedEgg?.variables.filter((v) => v.user_editable) ?? [];
+
+  function selectEgg(id: string) {
+    setEggId(id);
+    const egg = eggs?.find((e) => e.id === id);
+    const defaults: Record<string, string> = {};
+    for (const v of egg?.variables ?? []) {
+      if (v.user_editable) defaults[v.env] = v.default;
+    }
+    setVariables(defaults);
+  }
+
   const createServer = useMutation({
-    mutationFn: () => serversApi.create({ node_id: nodeId, egg_id: eggId, name, memory_bytes: memoryMb * 1024 * 1024 }),
+    mutationFn: () =>
+      serversApi.create({ node_id: nodeId, egg_id: eggId, name, memory_bytes: memoryMb * 1024 * 1024, variables }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["servers"] });
       setShowForm(false);
@@ -54,20 +70,34 @@ export function ServersListPage() {
           </div>
           <div className="sp-field">
             <label className="sp-label">Egg</label>
-            <select className="sp-select" value={eggId} onChange={(e) => setEggId(e.target.value)} required>
+            <select className="sp-select" value={eggId} onChange={(e) => selectEgg(e.target.value)} required>
               <option value="" disabled>
                 Select an egg
               </option>
               {eggs?.map((egg) => (
                 <option key={egg.id} value={egg.id}>
-                  {egg.name}
+                  {egg.category ? `${egg.category} — ${egg.name}` : egg.name}
                 </option>
               ))}
             </select>
+            {selectedEgg?.description && (
+              <p className="sp-mono" style={{ fontSize: 12, color: "var(--sp-text-muted)", marginTop: 6 }}>
+                {selectedEgg.description}
+              </p>
+            )}
           </div>
           <div className="sp-field">
-            <label className="sp-label">Node ID</label>
-            <input className="sp-input sp-mono" value={nodeId} onChange={(e) => setNodeId(e.target.value)} required />
+            <label className="sp-label">Node</label>
+            <select className="sp-select" value={nodeId} onChange={(e) => setNodeId(e.target.value)} required>
+              <option value="" disabled>
+                Select a node
+              </option>
+              {nodes?.map((node) => (
+                <option key={node.id} value={node.id} disabled={!node.connected}>
+                  {node.name} ({node.address}) {node.connected ? "" : "— offline"}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="sp-field">
             <label className="sp-label">Memory (MB)</label>
@@ -80,6 +110,25 @@ export function ServersListPage() {
               step={128}
             />
           </div>
+
+          {editableVariables.length > 0 && (
+            <div className="sp-field">
+              <label className="sp-label">{selectedEgg?.name} options</label>
+              {editableVariables.map((v) => (
+                <div key={v.env} style={{ marginBottom: 8 }}>
+                  <label className="sp-mono" style={{ fontSize: 12, color: "var(--sp-text-muted)" }}>
+                    {v.name}
+                  </label>
+                  <input
+                    className="sp-input sp-mono"
+                    value={variables[v.env] ?? v.default}
+                    onChange={(e) => setVariables((prev) => ({ ...prev, [v.env]: e.target.value }))}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           {error && <p className="sp-error">{error}</p>}
           <button className="sp-btn sp-btn--primary" type="submit" disabled={createServer.isPending}>
             {createServer.isPending ? "Creating…" : "Create"}

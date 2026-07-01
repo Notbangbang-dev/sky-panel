@@ -25,8 +25,12 @@ func toEggResponse(e *models.Egg) *models.Egg { return e }
 
 func (d Deps) CreateEgg(w http.ResponseWriter, r *http.Request) {
 	var req createEggRequest
-	if err := decodeJSON(r, &req); err != nil || req.Name == "" || req.DockerImage == "" || req.Startup == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "name, docker_image and startup are required")
+	// Startup is intentionally allowed to be empty: some images (e.g.
+	// itzg/minecraft-server) do everything through their own ENTRYPOINT
+	// driven entirely by env vars, and an empty Startup makes sky-daemon
+	// omit Docker's Cmd override so the image's own default runs.
+	if err := decodeJSON(r, &req); err != nil || req.Name == "" || req.DockerImage == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "name and docker_image are required")
 		return
 	}
 
@@ -71,6 +75,42 @@ func (d Deps) GetEgg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, toEggResponse(egg))
+}
+
+func (d Deps) UpdateEgg(w http.ResponseWriter, r *http.Request) {
+	eggID := pathParam(r, "eggID")
+
+	existing, err := d.Eggs.GetByID(eggID)
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "egg not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load egg")
+		return
+	}
+
+	var req createEggRequest
+	if err := decodeJSON(r, &req); err != nil || req.Name == "" || req.DockerImage == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "name and docker_image are required")
+		return
+	}
+
+	existing.Name = req.Name
+	existing.Category = req.Category
+	existing.Description = req.Description
+	existing.DockerImage = req.DockerImage
+	existing.Startup = req.Startup
+	existing.StopCommand = req.StopCommand
+	existing.Variables = req.Variables
+
+	if err := d.Eggs.Update(existing); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to update egg")
+		return
+	}
+	d.audit(r, "egg.update", existing.ID, existing.Name)
+
+	writeJSON(w, http.StatusOK, toEggResponse(existing))
 }
 
 func (d Deps) DeleteEgg(w http.ResponseWriter, r *http.Request) {

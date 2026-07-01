@@ -30,6 +30,13 @@ export interface RotateNodeTokenResult {
   expires_at: string;
 }
 
+export interface NodeSummary {
+  id: string;
+  name: string;
+  address: string;
+  connected: boolean;
+}
+
 export interface EggVariable {
   name: string;
   env: string;

@@ -33,6 +33,8 @@ func newTestRouter(t *testing.T) http.Handler {
 		RefreshTokens: repo.NewRefreshTokens(db),
 		JWT:           auth.NewManager("test-secret", 15*time.Minute),
 		Hub:           wshub.NewHub(),
+		Settings:      repo.NewSettings(db),
+		Audit:         repo.NewAudit(db),
 		RefreshTTL:    30 * 24 * time.Hour,
 	}
 
@@ -130,6 +132,54 @@ func TestRegisterDuplicateEmailConflicts(t *testing.T) {
 
 	if rec.Code != http.StatusConflict {
 		t.Errorf("expected 409, got %d", rec.Code)
+	}
+}
+
+func TestRegistrationStatusDefaultsToEnabled(t *testing.T) {
+	r := newTestRouter(t)
+
+	rec := doJSON(t, r, http.MethodGet, "/api/v1/public/registration-status", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var status map[string]bool
+	decodeBody(t, rec, &status)
+	if !status["enabled"] {
+		t.Error("expected registration to default to enabled when the setting has never been set")
+	}
+}
+
+func TestRegistrationCanBeDisabledByAdmin(t *testing.T) {
+	r := newTestRouter(t)
+
+	adminAccess := registerAndGetAccessToken(t, r, "admin@example.com", "admin")
+
+	setRec := authedJSON(t, r, http.MethodPut, "/api/v1/admin/settings/registration_enabled", adminAccess, map[string]string{"value": "false"})
+	if setRec.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 setting registration_enabled, got %d: %s", setRec.Code, setRec.Body.String())
+	}
+
+	statusRec := doJSON(t, r, http.MethodGet, "/api/v1/public/registration-status", nil)
+	var status map[string]bool
+	decodeBody(t, statusRec, &status)
+	if status["enabled"] {
+		t.Error("expected the public status endpoint to reflect registration being disabled")
+	}
+
+	rec := doJSON(t, r, http.MethodPost, "/api/v1/auth/register", registerRequest{
+		Email: "second@example.com", Username: "second", Password: "password123",
+	})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 registering a second user while disabled, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// Re-enabling must let new registrations through again.
+	authedJSON(t, r, http.MethodPut, "/api/v1/admin/settings/registration_enabled", adminAccess, map[string]string{"value": "true"})
+	rec = doJSON(t, r, http.MethodPost, "/api/v1/auth/register", registerRequest{
+		Email: "second@example.com", Username: "second", Password: "password123",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 registering after re-enabling, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 

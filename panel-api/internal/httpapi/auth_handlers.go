@@ -77,6 +77,14 @@ func (d Deps) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The very first account always gets through regardless of the toggle —
+	// otherwise a freshly deployed panel with registration disabled by
+	// default settings would have no way to ever create an admin.
+	if count > 0 && !d.registrationEnabled() {
+		writeError(w, http.StatusForbidden, "registration_disabled", "registration is currently disabled")
+		return
+	}
+
 	role := models.RoleUser
 	if count == 0 {
 		role = models.RoleAdmin
@@ -103,6 +111,24 @@ func (d Deps) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	d.issueTokenPair(w, user)
+}
+
+// registrationEnabled treats an unset "registration_enabled" setting as
+// enabled, so upgrading an existing install never silently locks out new
+// signups it never opted into blocking.
+func (d Deps) registrationEnabled() bool {
+	value, found, err := d.Settings.Get("registration_enabled")
+	if err != nil || !found {
+		return true
+	}
+	return value != "false"
+}
+
+// RegistrationStatus is a public, unauthenticated endpoint so the frontend
+// can hide the register flow proactively instead of letting someone fill
+// out the form and hit a 403.
+func (d Deps) RegistrationStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{"enabled": d.registrationEnabled()})
 }
 
 func (d Deps) Login(w http.ResponseWriter, r *http.Request) {

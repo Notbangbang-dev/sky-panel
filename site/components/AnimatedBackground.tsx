@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { THEME_CHANGE_EVENT, type Theme } from "@/lib/theme";
 
 interface Node {
   x: number;
@@ -12,6 +13,21 @@ interface Node {
 const NODE_COUNT = 60;
 const SPEED = 0.09;
 const LINK_DIST = 150;
+
+const PALETTES: Record<Theme, { lineRGB: string; nodeRGBA: string; gradient: string }> = {
+  dark: {
+    lineRGB: "242, 242, 240",
+    nodeRGBA: "rgba(200, 255, 61, 0.75)",
+    gradient:
+      "radial-gradient(circle at 15% 20%, #0e1013 0%, transparent 55%), radial-gradient(circle at 85% 80%, #0e1013 0%, transparent 55%), #08090b",
+  },
+  light: {
+    lineRGB: "16, 17, 20",
+    nodeRGBA: "rgba(120, 168, 0, 0.75)",
+    gradient:
+      "radial-gradient(circle at 15% 20%, #ffffff 0%, transparent 55%), radial-gradient(circle at 85% 80%, #ffffff 0%, transparent 55%), #f7f7f5",
+  },
+};
 
 /**
  * The same "server mesh" ambient backdrop as the panel app, reimplemented
@@ -36,6 +52,18 @@ export function AnimatedBackground() {
     let nodes: Node[] = [];
     let frameId = 0;
     let running = false;
+
+    // The no-flash script in the layout already set this before mount, so
+    // reading it here (rather than defaulting to "dark") gets the right
+    // palette on the very first frame too.
+    let theme: Theme = (document.documentElement.dataset.theme as Theme) ?? "dark";
+    canvas.style.background = PALETTES[theme].gradient;
+
+    function handleThemeChange(e: Event) {
+      theme = (e as CustomEvent<Theme>).detail;
+      canvas!.style.background = PALETTES[theme].gradient;
+    }
+    window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange);
 
     function resizeIfNeeded() {
       const nextWidth = document.documentElement.clientWidth;
@@ -82,7 +110,7 @@ export function AnimatedBackground() {
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < LINK_DIST) {
             const alpha = (1 - dist / LINK_DIST) * 0.3;
-            ctx!.strokeStyle = `rgba(242, 242, 240, ${alpha})`;
+            ctx!.strokeStyle = `rgba(${PALETTES[theme].lineRGB}, ${alpha})`;
             ctx!.lineWidth = 1;
             ctx!.beginPath();
             ctx!.moveTo(nodes[i].x, nodes[i].y);
@@ -93,7 +121,7 @@ export function AnimatedBackground() {
       }
 
       for (const n of nodes) {
-        ctx!.fillStyle = "rgba(200, 255, 61, 0.75)";
+        ctx!.fillStyle = PALETTES[theme].nodeRGBA;
         ctx!.beginPath();
         ctx!.arc(n.x, n.y, 1.6, 0, Math.PI * 2);
         ctx!.fill();
@@ -122,18 +150,9 @@ export function AnimatedBackground() {
     return () => {
       stop();
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange);
     };
   }, []);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden="true"
-      className="fixed inset-0 z-0 pointer-events-none"
-      style={{
-        background:
-          "radial-gradient(circle at 15% 20%, #0e1013 0%, transparent 55%), radial-gradient(circle at 85% 80%, #0e1013 0%, transparent 55%), #08090b",
-      }}
-    />
-  );
+  return <canvas ref={canvasRef} aria-hidden="true" className="fixed inset-0 z-0 pointer-events-none" />;
 }

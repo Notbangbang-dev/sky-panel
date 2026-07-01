@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function Nav() {
   return (
@@ -8,6 +9,9 @@ export function Nav() {
         <span className="font-mono text-[10px] tracking-[0.22em] text-text-muted">PANEL</span>
       </Link>
       <nav className="flex items-center gap-6 text-sm">
+        <Link href="/docs" className="text-text-muted hover:text-text transition-colors">
+          Docs
+        </Link>
         <Link href="/changelog" className="text-text-muted hover:text-text transition-colors">
           Changelog
         </Link>
@@ -23,6 +27,7 @@ export function Nav() {
         >
           Get started
         </a>
+        <ThemeToggle />
       </nav>
     </header>
   );

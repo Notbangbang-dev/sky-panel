@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { authApi } from "../lib/endpoints";
 import { useAuthStore } from "../lib/authStore";
 import { ApiError } from "../lib/api";
@@ -7,6 +8,7 @@ import { ApiError } from "../lib/api";
 export function LoginPage() {
   const navigate = useNavigate();
   const setSession = useAuthStore((s) => s.setSession);
+  const { data: registrationStatus } = useQuery({ queryKey: ["registration-status"], queryFn: authApi.registrationStatus });
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -82,9 +84,11 @@ export function LoginPage() {
           {loading ? "Signing in…" : "Sign in"}
         </button>
 
-        <p className="sp-mono" style={{ fontSize: 12, color: "var(--sp-text-muted)", marginTop: 18, textAlign: "center" }}>
-          No account? <Link to="/register">Register</Link>
-        </p>
+        {registrationStatus?.enabled !== false && (
+          <p className="sp-mono" style={{ fontSize: 12, color: "var(--sp-text-muted)", marginTop: 18, textAlign: "center" }}>
+            No account? <Link to="/register">Register</Link>
+          </p>
+        )}
       </form>
     </div>
   );
