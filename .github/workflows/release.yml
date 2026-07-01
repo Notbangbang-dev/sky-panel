@@ -36,6 +36,14 @@ jobs:
 
       - name: Build web dist
         working-directory: web
+        # VITE_API_URL is inlined at build time. Released web assets are
+        # served by Caddy from the same origin as panel-api (see
+        # installer/install.sh's Caddyfile), so an empty string here makes
+        # every request same-origin/relative instead of the local-dev
+        # default of an absolute http://localhost:8080 — which would only
+        # ever work on the machine loading the page, not the server.
+        env:
+          VITE_API_URL: ""
         run: |
           npm ci
           npm run build

@@ -3,6 +3,17 @@ import { API_BASE } from "./api";
 import { useAuthStore } from "./authStore";
 
 /**
+ * WebSocket URLs must be absolute (unlike fetch, which resolves a relative
+ * path against the page's own origin) — when apiBase is empty (same-origin
+ * production deploys, see api.ts), derive ws(s)://host from the page's own
+ * location instead of naively string-replacing an empty string.
+ */
+export function wsBaseFor(apiBase: string, location: Pick<Location, "protocol" | "host">): string {
+  if (apiBase) return apiBase.replace(/^http/, "ws");
+  return `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
+}
+
+/**
  * Subscribes to a single real-time topic (e.g. "server:<id>:stats") over its
  * own dedicated WebSocket connection. One connection per topic keeps the
  * wire format simple (no need to multiplex/disambiguate several topics'
@@ -27,7 +38,7 @@ export function useTopic<T>(topic: string | null, onMessage: (data: T) => void) 
 
     function connect() {
       const token = useAuthStore.getState().accessToken;
-      const wsBase = API_BASE.replace(/^http/, "ws");
+      const wsBase = wsBaseFor(API_BASE, window.location);
       const url = `${wsBase}/ws?topics=${encodeURIComponent(topic!)}&access_token=${encodeURIComponent(token ?? "")}`;
 
       socket = new WebSocket(url);
