@@ -9,7 +9,14 @@ import { ApiError } from "../lib/api";
 
 export function ServersListPage() {
   const queryClient = useQueryClient();
-  const { data: servers } = useQuery({ queryKey: ["servers"], queryFn: serversApi.list });
+  const { data: servers } = useQuery({
+    queryKey: ["servers"],
+    queryFn: serversApi.list,
+    // While a server is provisioning (async, may pull an image), poll so it
+    // flips from "installing" to "running" in the list without a manual reload.
+    refetchInterval: (query) =>
+      query.state.data?.some((s) => s.status === "installing" || s.status === "stopping") ? 3000 : false,
+  });
   const { data: eggs } = useQuery({ queryKey: ["eggs"], queryFn: eggsApi.list });
   const { data: nodes } = useQuery({ queryKey: ["nodes"], queryFn: nodesApi.list });
   const { data: quota } = useQuery({ queryKey: ["quota"], queryFn: quotaApi.mine });

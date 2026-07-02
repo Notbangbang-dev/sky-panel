@@ -2,6 +2,16 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.0] - 2026-07-02
+
+### 🛠 Fixes
+
+- **Creating a server no longer fails with `dispatch create: context deadline exceeded`.** The panel used to wait synchronously (15s, under a 30s request cap) for the node to create and start the container — but a first-time create pulls the egg's Docker image, which can take minutes. Provisioning is now **asynchronous**: creating a server returns immediately with the server shown as **installing**, the node does the work (including the image pull, see sky-daemon v0.3.0) in the background, and the server flips to **running** (or **errored**) when it's done. The servers list auto-refreshes while anything is installing, so it updates on its own.
+
+### 🔗 Requires
+
+- **sky-daemon v0.3.0** on your nodes for the image-pull fix (`sudo sky-panel-update` updates both). Without it, creation still won't fail with a timeout, but a node missing the image will end up **errored** until the image is present.
+
 ## [0.10.0] - 2026-07-02
 
 ### ✨ New Features

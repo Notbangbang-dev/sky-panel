@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -10,6 +11,7 @@ import (
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/auth"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/models"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/repo"
+	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/serversvc"
 )
 
 type createServerRequest struct {
@@ -75,18 +77,25 @@ func (d Deps) CreateServer(w http.ResponseWriter, r *http.Request) {
 
 	server, err := d.ServerSvc.CreateServer(claims.UserID, req.NodeID, req.EggID, req.Name, req.MemoryBytes, req.CPULimit, req.DiskBytes, req.Variables)
 	if err != nil {
-		if server != nil {
-			// Provisioned but the node failed to actually create/start it;
-			// surface as 502 rather than losing the row from view.
-			writeJSON(w, http.StatusBadGateway, map[string]any{
-				"error": "node_dispatch_failed", "message": err.Error(), "server": toServerResponse(server),
-			})
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
 		return
 	}
 	d.audit(r, "server.create", server.ID, server.Name)
+
+	// Provision (create + start the container, which may pull a large image on
+	// first use) in the background so the request returns immediately with an
+	// "installing" server rather than timing out. The recover keeps a
+	// provisioning panic from taking down the API.
+	go func(serverID, name string) {
+		defer func() {
+			if p := recover(); p != nil {
+				log.Printf("server %s provisioning panicked: %v", serverID, p)
+			}
+		}()
+		if err := d.ServerSvc.Provision(serverID, serversvc.ProvisionCreateTimeout); err != nil {
+			log.Printf("server %s (%s) provisioning failed: %v", serverID, name, err)
+		}
+	}(server.ID, server.Name)
 
 	writeJSON(w, http.StatusCreated, toServerResponse(server))
 }

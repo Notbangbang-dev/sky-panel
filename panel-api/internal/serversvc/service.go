@@ -21,7 +21,18 @@ import (
 // tested without a real node connection.
 type CommandSender interface {
 	SendCommand(nodeID string, cmd agenthub.CommandPayload) (agenthub.AckPayload, error)
+	SendCommandTimeout(nodeID string, cmd agenthub.CommandPayload, timeout time.Duration) (agenthub.AckPayload, error)
 }
+
+const (
+	// defaultProvisionTimeout bounds an ordinary dispatch (image already
+	// present on the node).
+	defaultProvisionTimeout = 15 * time.Second
+	// ProvisionCreateTimeout bounds a first-time container create, which may
+	// pull a large image from a registry (minutes). CreateServer provisions in
+	// the background so this long wait never blocks the HTTP request.
+	ProvisionCreateTimeout = 10 * time.Minute
+)
 
 type Service struct {
 	Servers     *repo.Servers
@@ -43,8 +54,7 @@ var ErrCommandFailed = fmt.Errorf("node reported command failure")
 // persisted regardless of whether the node ack succeeds, so a failure is
 // visible/retryable rather than silently vanishing.
 func (s *Service) CreateServer(ownerID, nodeID, eggID, name string, memoryBytes int64, cpuLimit int, diskBytes int64, overrides map[string]string) (*models.Server, error) {
-	egg, err := s.Eggs.GetByID(eggID)
-	if err != nil {
+	if _, err := s.Eggs.GetByID(eggID); err != nil {
 		return nil, fmt.Errorf("load egg: %w", err)
 	}
 	if _, err := s.Nodes.GetByID(nodeID); err != nil {
@@ -86,14 +96,30 @@ func (s *Service) CreateServer(ownerID, nodeID, eggID, name string, memoryBytes 
 	}
 	server.PrimaryPort = port
 
-	if err := s.provision(server, egg); err != nil {
-		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
-		return server, err
-	}
-
-	_ = s.Servers.SetStatus(serverID, models.StatusRunning)
-	server.Status = models.StatusRunning
+	// The server row + port are ready; the container itself is provisioned
+	// separately (see Provision), because a first-time create may pull a large
+	// image and take minutes. The server is returned "installing".
 	return server, nil
+}
+
+// Provision creates and starts a prepared server's container on its node and
+// records the resulting status (running on success, errored on failure).
+// It's normally run in a background goroutine right after CreateServer, since
+// the create step may pull a large image. createTimeout bounds that wait.
+func (s *Service) Provision(serverID string, createTimeout time.Duration) error {
+	server, err := s.Servers.GetByID(serverID)
+	if err != nil {
+		return fmt.Errorf("load server: %w", err)
+	}
+	egg, err := s.Eggs.GetByID(server.EggID)
+	if err != nil {
+		return fmt.Errorf("load egg: %w", err)
+	}
+	if err := s.provision(server, egg, createTimeout); err != nil {
+		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
+		return err
+	}
+	return s.Servers.SetStatus(serverID, models.StatusRunning)
 }
 
 // UpdateServer applies edited settings (name, resource limits, egg
@@ -117,7 +143,7 @@ func (s *Service) UpdateServer(serverID, name string, memoryBytes int64, cpuLimi
 	// Recreate the container with the new spec (remove is best-effort — the
 	// container may not exist if it was never started or the node was down).
 	_, _ = s.dispatch(server.NodeID, agenthub.ActionRemove, serverID, nil)
-	if err := s.provision(server, egg); err != nil {
+	if err := s.provision(server, egg, defaultProvisionTimeout); err != nil {
 		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
 		return server, err
 	}
@@ -140,7 +166,7 @@ func (s *Service) ReinstallServer(serverID string) error {
 	}
 
 	_, _ = s.dispatch(server.NodeID, agenthub.ActionRemove, serverID, nil)
-	if err := s.provision(server, egg); err != nil {
+	if err := s.provision(server, egg, defaultProvisionTimeout); err != nil {
 		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
 		return err
 	}
@@ -173,10 +199,11 @@ func (s *Service) UnsuspendServer(serverID string) error {
 }
 
 // provision builds the container spec for a server and dispatches
-// create + start to its node.
-func (s *Service) provision(server *models.Server, egg *models.Egg) error {
+// create + start to its node. The create dispatch gets createTimeout (it may
+// pull an image); the start that follows uses the ordinary timeout.
+func (s *Service) provision(server *models.Server, egg *models.Egg, createTimeout time.Duration) error {
 	spec := s.buildSpec(server, egg)
-	if _, err := s.dispatch(server.NodeID, agenthub.ActionCreate, server.ID, spec); err != nil {
+	if _, err := s.dispatchTimeout(server.NodeID, agenthub.ActionCreate, server.ID, spec, createTimeout); err != nil {
 		return fmt.Errorf("dispatch create: %w", err)
 	}
 	if _, err := s.dispatch(server.NodeID, agenthub.ActionStart, server.ID, nil); err != nil {
@@ -334,12 +361,16 @@ func (s *Service) dispatchFile(serverID, action, path string) error {
 }
 
 func (s *Service) dispatch(nodeID, action, serverID string, spec *agenthub.ContainerSpec) (agenthub.AckPayload, error) {
-	ack, err := s.Hub.SendCommand(nodeID, agenthub.CommandPayload{
+	return s.dispatchTimeout(nodeID, action, serverID, spec, defaultProvisionTimeout)
+}
+
+func (s *Service) dispatchTimeout(nodeID, action, serverID string, spec *agenthub.ContainerSpec, timeout time.Duration) (agenthub.AckPayload, error) {
+	ack, err := s.Hub.SendCommandTimeout(nodeID, agenthub.CommandPayload{
 		CommandID: uuid.NewString(),
 		Action:    action,
 		ServerID:  serverID,
 		Spec:      spec,
-	})
+	}, timeout)
 	if err != nil {
 		return ack, err
 	}

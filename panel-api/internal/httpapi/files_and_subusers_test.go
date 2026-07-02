@@ -56,6 +56,10 @@ func setupServerWithFakeAgent(t *testing.T) (router http.Handler, srvURL string,
 	}
 	decodeBody(t, createServerRec, &server)
 
+	// Provisioning is async; wait for it to finish so downstream steps act on a
+	// fully-provisioned server rather than racing the background goroutine.
+	server = waitForServerRunning(t, r, ownerAccess, server.ID)
+
 	return r, ts.URL, adminAccess, ownerAccess, server
 }
 

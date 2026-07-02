@@ -27,6 +27,10 @@ func (f *fakeSender) SendCommand(nodeID string, cmd agenthub.CommandPayload) (ag
 	return agenthub.AckPayload{CommandID: cmd.CommandID, OK: true}, nil
 }
 
+func (f *fakeSender) SendCommandTimeout(nodeID string, cmd agenthub.CommandPayload, _ time.Duration) (agenthub.AckPayload, error) {
+	return f.SendCommand(nodeID, cmd)
+}
+
 func newTestService(t *testing.T, sender CommandSender) (*Service, *repo.Nodes, *repo.Eggs, *repo.Servers, *repo.Users) {
 	t.Helper()
 
@@ -111,11 +115,17 @@ func TestCreateServerHappyPath(t *testing.T) {
 		t.Fatalf("CreateServer: %v", err)
 	}
 
-	if server.Status != models.StatusRunning {
-		t.Errorf("expected status running, got %q", server.Status)
+	// CreateServer only prepares the row + port; it comes back "installing".
+	if server.Status != models.StatusInstalling {
+		t.Errorf("expected status installing right after create, got %q", server.Status)
 	}
 	if server.PrimaryPort != 25565 {
 		t.Errorf("expected port 25565, got %d", server.PrimaryPort)
+	}
+
+	// Provisioning (run in the background in production) does the dispatch.
+	if err := svc.Provision(server.ID, defaultProvisionTimeout); err != nil {
+		t.Fatalf("Provision: %v", err)
 	}
 
 	if len(sender.commands) != 2 {
@@ -173,11 +183,13 @@ func TestCreateServerDispatchFailureMarksErrored(t *testing.T) {
 	}
 
 	server, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "My Server", 1024, 0, 0, nil)
-	if err == nil {
-		t.Fatal("expected CreateServer to surface the dispatch error")
+	if err != nil {
+		t.Fatalf("CreateServer (prepare) should succeed, got: %v", err)
 	}
-	if server == nil {
-		t.Fatal("expected the server row to still be returned for visibility")
+
+	// Provisioning fails at the create dispatch and must mark the server errored.
+	if err := svc.Provision(server.ID, defaultProvisionTimeout); err == nil {
+		t.Fatal("expected Provision to surface the dispatch error")
 	}
 
 	persisted, err := servers.GetByID(server.ID)

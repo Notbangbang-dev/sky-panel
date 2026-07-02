@@ -193,8 +193,13 @@ func TestServerLifecycleEndToEndOverHTTP(t *testing.T) {
 
 	var server serverResponse
 	decodeBody(t, createServerRec, &server)
-	if server.Status != "running" {
-		t.Errorf("expected server status running after create, got %q", server.Status)
+	if server.Status != "installing" {
+		t.Errorf("expected server status installing right after create, got %q", server.Status)
+	}
+	// Provisioning is async; it should reach running shortly.
+	running := waitForServerRunning(t, router, userAccess, server.ID)
+	if running.Status != "running" {
+		t.Errorf("expected server to reach running, got %q", running.Status)
 	}
 
 	// Another user must not be able to see or control it.
@@ -227,6 +232,27 @@ func authedRequest(t *testing.T, r http.Handler, method, path, accessToken strin
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 	return rec
+}
+
+// waitForServerRunning polls a server until it leaves "installing" — i.e. the
+// background provisioning goroutine has finished create+start. Servers are
+// provisioned asynchronously now, so callers that need a live server wait here.
+func waitForServerRunning(t *testing.T, r http.Handler, access, serverID string) serverResponse {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		rec := authedRequest(t, r, http.MethodGet, "/api/v1/servers/"+serverID, access)
+		if rec.Code == http.StatusOK {
+			var s serverResponse
+			decodeBody(t, rec, &s)
+			if s.Status != "installing" {
+				return s
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("server %s stayed 'installing' past the deadline", serverID)
+	return serverResponse{}
 }
 
 // waitForNodeConnected polls the node list until the node actually reports

@@ -120,12 +120,19 @@ func (r *Registry) Connected(nodeID string) bool {
 // SendCommand is a convenience wrapper for the common case of looking the
 // node up and sending in one call, with a sensible default timeout.
 func (r *Registry) SendCommand(nodeID string, cmd CommandPayload) (AckPayload, error) {
+	return r.SendCommandTimeout(nodeID, cmd, 15*time.Second)
+}
+
+// SendCommandTimeout is SendCommand with a caller-chosen ack deadline. Used for
+// operations that can legitimately take a long time on the node — notably
+// container creation, which may pull a multi-hundred-MB image on first use.
+func (r *Registry) SendCommandTimeout(nodeID string, cmd CommandPayload, timeout time.Duration) (AckPayload, error) {
 	conn, ok := r.Get(nodeID)
 	if !ok {
 		return AckPayload{}, ErrNodeOffline
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	return conn.SendCommand(ctx, cmd)
