@@ -151,9 +151,10 @@ func (s *Service) UpdateServer(serverID, name string, memoryBytes int64, cpuLimi
 		return nil, fmt.Errorf("load egg: %w", err)
 	}
 
-	// Recreate the container with the new spec (remove is best-effort — the
-	// container may not exist if it was never started or the node was down).
-	_, _ = s.dispatch(server.NodeID, agenthub.ActionRemove, serverID, nil)
+	// Recreate the container with the new spec. provision's create step removes
+	// any existing container with the same name and recreates it, so there's no
+	// separate remove dispatch (which could race the create and delete the new
+	// container).
 	if err := s.provision(server, egg, defaultProvisionTimeout); err != nil {
 		_ = s.Servers.SetError(serverID, err.Error())
 		return server, err
@@ -193,8 +194,10 @@ func (s *Service) ReinstallServer(serverID, eggID string) error {
 
 	// Show "installing" while we re-pull/recreate (may take minutes), and use
 	// the long create timeout so a retry of a failed install can finish.
+	// No separate remove dispatch: provision's create step already removes any
+	// name-clashing container and recreates it. Removing here in parallel could
+	// race the create and delete the freshly made container.
 	_ = s.Servers.SetStatus(serverID, models.StatusInstalling)
-	_, _ = s.dispatch(server.NodeID, agenthub.ActionRemove, serverID, nil)
 	if err := s.provision(server, egg, ProvisionCreateTimeout); err != nil {
 		_ = s.Servers.SetError(serverID, err.Error())
 		return err

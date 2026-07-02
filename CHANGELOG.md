@@ -2,6 +2,13 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.3] - 2026-07-02
+
+### 🛠 Fixes
+
+- **Copy buttons work again.** The connect-address and API-key copy buttons used the clipboard API, which browsers only expose over HTTPS — on a plain-HTTP panel it silently did nothing. They now fall back to a legacy copy path that works over HTTP too.
+- **Reinstall no longer risks deleting the fresh container.** The panel used to remove the old container and recreate in parallel; with the daemon now handling commands concurrently, those could race. Reinstall/update no longer send a separate remove — the daemon's create step clears any name-clashing container itself (see sky-daemon v0.4.4). Update both for reinstalls to work cleanly.
+
 ## [0.15.2] - 2026-07-02
 
 ### 🎨 Improvements

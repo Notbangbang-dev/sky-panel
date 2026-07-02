@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { accountApi, authApi } from "../lib/endpoints";
 import { useAuthStore } from "../lib/authStore";
 import { ApiError } from "../lib/api";
+import { copyText } from "../lib/clipboard";
 import type { ApiKey, Session, TotpSetup } from "../types/api";
 
 export function AccountPage() {
@@ -380,10 +381,10 @@ function ApiKeysCard() {
             <button
               className="sp-btn sp-btn--sm"
               onClick={() => {
-                navigator.clipboard?.writeText(freshKey).then(
-                  () => setCopied(true),
-                  () => setCopied(false),
-                );
+                copyText(freshKey).then((ok) => {
+                  setCopied(ok);
+                  if (ok) setTimeout(() => setCopied(false), 1500);
+                });
               }}
             >
               {copied ? "Copied" : "Copy"}

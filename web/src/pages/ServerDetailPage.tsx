@@ -13,6 +13,7 @@ import { ActivityTab } from "../components/server/ActivityTab";
 import { BackupsTab } from "../components/server/BackupsTab";
 import { SchedulesTab } from "../components/server/SchedulesTab";
 import { formatBytes, formatCpu } from "../lib/format";
+import { copyText } from "../lib/clipboard";
 import type { ContainerHeartbeat } from "../types/api";
 
 interface ConsoleLine {
@@ -95,13 +96,12 @@ export function ServerDetailPage() {
   const address = node?.address ? `${node.address}:${server.primary_port}` : `:${server.primary_port}`;
 
   const copyAddress = () => {
-    navigator.clipboard?.writeText(address).then(
-      () => {
+    copyText(address).then((ok) => {
+      if (ok) {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
-      },
-      () => setCopied(false),
-    );
+      }
+    });
   };
 
   const startBlocked = running || busy || (server.suspended && !isAdmin);
