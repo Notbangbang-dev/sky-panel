@@ -39,13 +39,22 @@ func NewRouter(d Deps) http.Handler {
 		})
 
 		r.Group(func(r chi.Router) {
-			r.Use(auth.RequireAuth(d.JWT))
+			r.Use(auth.RequireAuth(d.JWT, d.resolveAPIKey))
 
 			r.Get("/me", d.Me)
 			r.Get("/me/quota", d.MyQuota)
+			r.Post("/me/password", d.ChangePassword)
+			r.Get("/me/sessions", d.ListSessions)
+			r.Post("/me/sessions/revoke-others", d.RevokeOtherSessions)
+			r.Delete("/me/sessions/{sessionID}", d.RevokeSession)
+			r.Get("/me/api-keys", d.ListAPIKeys)
+			r.Post("/me/api-keys", d.CreateAPIKey)
+			r.Delete("/me/api-keys/{keyID}", d.DeleteAPIKey)
 			r.Post("/me/totp/setup", d.TOTPSetup)
 			r.Post("/me/totp/confirm", d.TOTPConfirm)
 			r.Post("/me/totp/disable", d.TOTPDisable)
+
+			r.Get("/leaderboard", d.Leaderboard)
 
 			r.Route("/servers", func(r chi.Router) {
 				r.Get("/", d.ListServers)
@@ -62,6 +71,11 @@ func NewRouter(d Deps) http.Handler {
 				r.Post("/{serverID}/backups", d.CreateBackup)
 				r.Post("/{serverID}/backups/restore", d.RestoreBackup)
 				r.Delete("/{serverID}/backups", d.DeleteBackup)
+
+				r.Get("/{serverID}/schedules", d.ListSchedules)
+				r.Post("/{serverID}/schedules", d.CreateSchedule)
+				r.Post("/{serverID}/schedules/{scheduleID}/toggle", d.ToggleSchedule)
+				r.Delete("/{serverID}/schedules/{scheduleID}", d.DeleteSchedule)
 
 				r.Get("/{serverID}/subusers", d.ListSubusers)
 				r.Post("/{serverID}/subusers", d.AddSubuser)
@@ -130,7 +144,7 @@ func NewRouter(d Deps) http.Handler {
 	})
 
 	r.Group(func(r chi.Router) {
-		r.Use(auth.RequireAuth(d.JWT))
+		r.Use(auth.RequireAuth(d.JWT, d.resolveAPIKey))
 		r.Get("/ws", d.ServeWS)
 	})
 

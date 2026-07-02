@@ -11,6 +11,7 @@ import { SharingTab } from "../components/server/SharingTab";
 import { SettingsTab } from "../components/server/SettingsTab";
 import { ActivityTab } from "../components/server/ActivityTab";
 import { BackupsTab } from "../components/server/BackupsTab";
+import { SchedulesTab } from "../components/server/SchedulesTab";
 import { formatBytes, formatCpu } from "../lib/format";
 import type { ContainerHeartbeat } from "../types/api";
 
@@ -20,7 +21,7 @@ interface ConsoleLine {
   message: string;
 }
 
-const TABS = ["Console", "Files", "Backups", "Activity", "Settings", "Sharing"] as const;
+const TABS = ["Console", "Files", "Backups", "Schedules", "Activity", "Settings", "Sharing"] as const;
 type Tab = (typeof TABS)[number];
 
 export function ServerDetailPage() {
@@ -43,7 +44,8 @@ export function ServerDetailPage() {
 
   const isAdmin = user?.role === "admin";
   const canManage = !!server && !!user && (server.owner_id === user.id || isAdmin);
-  const visibleTabs = TABS.filter((t) => (t !== "Sharing" && t !== "Settings") || canManage);
+  const manageOnly: Tab[] = ["Schedules", "Settings", "Sharing"];
+  const visibleTabs = TABS.filter((t) => !manageOnly.includes(t) || canManage);
   const [tab, setTab] = useState<Tab>("Console");
 
   const [lines, setLines] = useState<string[]>([]);
@@ -205,6 +207,7 @@ export function ServerDetailPage() {
       )}
       {tab === "Files" && <FilesTab serverId={id!} />}
       {tab === "Backups" && <BackupsTab serverId={id!} />}
+      {tab === "Schedules" && canManage && <SchedulesTab serverId={id!} />}
       {tab === "Activity" && <ActivityTab serverId={id!} />}
       {tab === "Settings" && canManage && <SettingsTab server={server} />}
       {tab === "Sharing" && canManage && <SharingTab serverId={id!} />}

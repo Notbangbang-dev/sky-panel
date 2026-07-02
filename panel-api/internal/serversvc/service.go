@@ -378,6 +378,52 @@ func (s *Service) dispatchFile(serverID, action, path string) error {
 	return nil
 }
 
+// SendConsole writes a line to a running server's console (used by scheduled
+// "command" automations and reused by the HTTP console handler's needs).
+func (s *Service) SendConsole(serverID, input string) error {
+	server, err := s.Servers.GetByID(serverID)
+	if err != nil {
+		return fmt.Errorf("load server: %w", err)
+	}
+	ack, err := s.Hub.SendCommand(server.NodeID, agenthub.CommandPayload{
+		CommandID: uuid.NewString(),
+		Action:    agenthub.ActionConsole,
+		ServerID:  serverID,
+		Input:     input,
+	})
+	if err != nil {
+		return err
+	}
+	if !ack.OK {
+		return fmt.Errorf("%w: %s", ErrCommandFailed, ack.Error)
+	}
+	return nil
+}
+
+// RunScheduleAction executes one automation action against a server.
+func (s *Service) RunScheduleAction(serverID, action, payload string) error {
+	switch action {
+	case models.ScheduleStart:
+		return s.PowerAction(serverID, agenthub.ActionStart)
+	case models.ScheduleStop:
+		return s.PowerAction(serverID, agenthub.ActionStop)
+	case models.ScheduleKill:
+		return s.PowerAction(serverID, agenthub.ActionKill)
+	case models.ScheduleRestart:
+		if err := s.PowerAction(serverID, agenthub.ActionStop); err != nil {
+			return err
+		}
+		return s.PowerAction(serverID, agenthub.ActionStart)
+	case models.ScheduleBackup:
+		_, err := s.Backup(serverID)
+		return err
+	case models.ScheduleCommand:
+		return s.SendConsole(serverID, payload)
+	default:
+		return fmt.Errorf("unknown schedule action %q", action)
+	}
+}
+
 func (s *Service) dispatch(nodeID, action, serverID string, spec *agenthub.ContainerSpec) (agenthub.AckPayload, error) {
 	return s.dispatchTimeout(nodeID, action, serverID, spec, defaultProvisionTimeout)
 }

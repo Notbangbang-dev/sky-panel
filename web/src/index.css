@@ -1155,3 +1155,111 @@ a.sp-card:hover {
   cursor: pointer;
   max-width: 480px;
 }
+
+/* ---------- Leaderboard podium ---------- */
+
+.sp-podium {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: end;
+  gap: 16px;
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.sp-podium__col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 0;
+}
+
+.sp-podium__badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--sp-font-display);
+  font-size: 18px;
+  border: 1px solid var(--sp-surface-border);
+  color: var(--sp-text-muted);
+  margin-bottom: 8px;
+}
+
+.sp-podium__badge[data-rank="1"] {
+  color: var(--sp-accent-text);
+  background: var(--sp-accent);
+  border-color: var(--sp-accent);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--sp-accent) 45%, transparent);
+}
+
+.sp-podium__name {
+  font-family: var(--sp-font-display);
+  font-size: 20px;
+  line-height: 1.1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sp-podium__you {
+  font-family: var(--sp-font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--sp-text-muted);
+  vertical-align: middle;
+}
+
+.sp-podium__coins {
+  font-size: 13px;
+  color: var(--sp-text-muted);
+  font-variant-numeric: tabular-nums;
+  margin: 2px 0 10px;
+}
+
+.sp-podium__pillar {
+  width: 100%;
+  border-radius: var(--sp-radius) var(--sp-radius) 0 0;
+  border: 1px solid var(--sp-surface-border);
+  border-bottom: none;
+  background: linear-gradient(180deg, var(--sp-elevate), transparent);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10px;
+  position: relative;
+  overflow: hidden;
+}
+
+.sp-podium__pillar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 9px,
+    var(--sp-hairline) 9px,
+    var(--sp-hairline) 10px
+  );
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.sp-podium__pillar[data-rank="1"] {
+  border-color: color-mix(in srgb, var(--sp-accent) 55%, var(--sp-surface-border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sp-accent) 16%, transparent), transparent);
+}
+
+.sp-podium__pillar-rank {
+  font-family: var(--sp-font-display);
+  font-size: 26px;
+  color: var(--sp-text);
+  opacity: 0.65;
+  position: relative;
+  z-index: 1;
+}

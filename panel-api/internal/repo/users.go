@@ -105,6 +105,28 @@ func (r *Users) List() ([]*models.User, error) {
 	return out, rows.Err()
 }
 
+// TopByCoins returns the highest-balance users (username + coins), for the
+// leaderboard.
+func (r *Users) TopByCoins(limit int) ([]*models.User, error) {
+	rows, err := r.db.Query(
+		`SELECT id, username, coins FROM users ORDER BY coins DESC, created_at LIMIT ?`, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*models.User
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(&u.ID, &u.Username, &u.Coins); err != nil {
+			return nil, err
+		}
+		out = append(out, &u)
+	}
+	return out, rows.Err()
+}
+
 func (r *Users) scanOne(query string, args ...any) (*models.User, error) {
 	u, err := scanUserRow(r.db.QueryRow(query, args...))
 	if errors.Is(err, sql.ErrNoRows) {

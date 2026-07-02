@@ -2,6 +2,7 @@ import { apiRequest } from "./api";
 import type {
   AdminQuotaInfo,
   Allocation,
+  ApiKey,
   AuditEntry,
   BackupEntry,
   CoinResult,
@@ -9,6 +10,7 @@ import type {
   Egg,
   EggVariable,
   HeartbeatResult,
+  LeaderboardEntry,
   ListFilesResult,
   Node,
   NodeSummary,
@@ -16,6 +18,9 @@ import type {
   QuotaInfo,
   ReadFileResult,
   RotateNodeTokenResult,
+  Schedule,
+  ScheduleAction,
+  Session,
   Server,
   StoreItem,
   Subuser,
@@ -24,6 +29,36 @@ import type {
   User,
   Wallet,
 } from "../types/api";
+
+export const accountApi = {
+  changePassword: (current_password: string, new_password: string) =>
+    apiRequest<void>("/api/v1/me/password", { method: "POST", body: { current_password, new_password } }),
+  listSessions: (currentRefreshToken?: string) =>
+    apiRequest<Session[]>(
+      `/api/v1/me/sessions${currentRefreshToken ? `?current=${encodeURIComponent(currentRefreshToken)}` : ""}`,
+    ),
+  revokeSession: (id: string) => apiRequest<void>(`/api/v1/me/sessions/${id}`, { method: "DELETE" }),
+  revokeOtherSessions: (current_refresh_token: string) =>
+    apiRequest<void>("/api/v1/me/sessions/revoke-others", { method: "POST", body: { current_refresh_token } }),
+  listApiKeys: () => apiRequest<ApiKey[]>("/api/v1/me/api-keys"),
+  createApiKey: (name: string) =>
+    apiRequest<{ name: string; key: string }>("/api/v1/me/api-keys", { method: "POST", body: { name } }),
+  deleteApiKey: (id: string) => apiRequest<void>(`/api/v1/me/api-keys/${id}`, { method: "DELETE" }),
+};
+
+export const schedulesApi = {
+  list: (serverId: string) => apiRequest<Schedule[]>(`/api/v1/servers/${serverId}/schedules`),
+  create: (serverId: string, body: { name: string; action: ScheduleAction; payload?: string; interval_minutes: number }) =>
+    apiRequest<Schedule>(`/api/v1/servers/${serverId}/schedules`, { method: "POST", body }),
+  toggle: (serverId: string, id: string, enabled: boolean) =>
+    apiRequest<void>(`/api/v1/servers/${serverId}/schedules/${id}/toggle`, { method: "POST", body: { enabled } }),
+  remove: (serverId: string, id: string) =>
+    apiRequest<void>(`/api/v1/servers/${serverId}/schedules/${id}`, { method: "DELETE" }),
+};
+
+export const leaderboardApi = {
+  list: () => apiRequest<LeaderboardEntry[]>("/api/v1/leaderboard"),
+};
 
 export const authApi = {
   register: (email: string, username: string, password: string) =>

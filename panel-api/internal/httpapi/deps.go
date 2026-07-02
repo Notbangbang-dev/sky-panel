@@ -22,12 +22,14 @@ type Deps struct {
 	JWT           *auth.Manager
 	Hub           *wshub.Hub
 
+	APIKeys     *repo.APIKeys
 	Nodes       *repo.Nodes
 	Eggs        *repo.Eggs
 	Servers     *repo.Servers
 	Allocations *repo.Allocations
 	Subusers    *repo.Subusers
 	Quotas      *repo.Quotas
+	Schedules   *repo.Schedules
 	ServerSvc   *serversvc.Service
 	AgentHub    *agenthub.Handler
 	CoinSvc     *coinsvc.Service

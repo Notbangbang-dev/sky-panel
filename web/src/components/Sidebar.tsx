@@ -14,6 +14,7 @@ const PRIMARY_NAV: NavItem[] = [
   { label: "Nodes", to: "/nodes", glyph: "⬢" },
   { label: "Wallet", to: "/wallet", glyph: "◈" },
   { label: "Store", to: "/store", glyph: "⧉" },
+  { label: "Leaderboard", to: "/leaderboard", glyph: "♛" },
   { label: "AFK", to: "/afk", glyph: "◐" },
   { label: "Account", to: "/account", glyph: "◎" },
 ];

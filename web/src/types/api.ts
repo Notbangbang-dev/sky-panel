@@ -165,6 +165,38 @@ export interface TotpSetup {
   url: string;
 }
 
+export interface Session {
+  id: string;
+  created_at: string;
+  expires_at: string;
+  current: boolean;
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  last_used_at?: string;
+  created_at: string;
+}
+
+export type ScheduleAction = "start" | "stop" | "restart" | "kill" | "backup" | "command";
+
+export interface Schedule {
+  id: string;
+  name: string;
+  action: ScheduleAction;
+  payload?: string;
+  interval_minutes: number;
+  enabled: boolean;
+  last_run_at?: string;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  username: string;
+  coins: number;
+}
+
 export const PERMISSIONS = ["console", "files", "power", "settings"] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 

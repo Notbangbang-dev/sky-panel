@@ -2,6 +2,22 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.0] - 2026-07-02
+
+### ✨ New Features
+
+Five more features ported from the cloud-panel playbook:
+
+- **Change your password.** Account → Change password verifies your current password, enforces a minimum length, and — for safety — signs every other session out when you change it. The tab you're on stays logged in.
+- **Active sessions.** See every device currently signed in to your account, with the current one clearly marked. Revoke any single session, or **Sign out others** in one click (e.g. after using a shared computer).
+- **Personal API keys.** Mint `sky_…` keys under Account → API keys and use them as a `Bearer` token to drive the panel API from scripts and CI. Keys are shown exactly once at creation (and only ever stored hashed), track their last-used time, and can be revoked anytime.
+- **Server automations (schedules).** Each server has a **Schedules** tab: have the panel automatically **start / stop / restart / kill / back up** a server — or **run a console command** — on a fixed interval (every 30 minutes up to daily). Pause, resume, or delete any automation. They run on their own, even while you're away.
+- **Coins leaderboard.** A new **Leaderboard** page ranks the top coin balances with a podium for the top three (you're highlighted), so idling on the AFK page now comes with some bragging rights.
+
+### 🔗 Requires
+
+- Panel-only release — works with sky-daemon v0.3.0.
+
 ## [0.13.0] - 2026-07-02
 
 ### ✨ New Features
