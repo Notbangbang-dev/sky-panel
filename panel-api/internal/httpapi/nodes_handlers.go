@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -78,6 +79,14 @@ func (d Deps) CreateNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.audit(r, "node.create", node.ID, node.Name)
+
+	// Seed a default block of port allocations so servers can be created on
+	// this node immediately, out of the box. Best-effort: a seeding hiccup
+	// shouldn't fail node registration — the operator can add ports later in
+	// the Allocations tab.
+	if _, err := d.Allocations.CreateRange(node.ID, DefaultAllocationStart, DefaultAllocationStart+DefaultAllocationCount-1); err == nil {
+		d.audit(r, "allocation.seed", node.ID, fmt.Sprintf("%d-%d", DefaultAllocationStart, DefaultAllocationStart+DefaultAllocationCount-1))
+	}
 
 	writeJSON(w, http.StatusCreated, createNodeResponse{nodeResponse: toNodeResponse(node), NodeToken: rawToken})
 }

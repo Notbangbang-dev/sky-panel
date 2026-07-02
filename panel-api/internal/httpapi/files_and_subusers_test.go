@@ -13,7 +13,7 @@ import (
 // dispatch has somewhere to land.
 func setupServerWithFakeAgent(t *testing.T) (router http.Handler, srvURL string, adminAccess, ownerAccess string, server serverResponse) {
 	t.Helper()
-	r, allocations := newFullTestRouter(t)
+	r, _ := newFullTestRouter(t)
 	// httptest.NewServer wraps r so the fake agent can dial a real ws URL.
 	ts := httptest.NewServer(r)
 	t.Cleanup(ts.Close)
@@ -45,9 +45,7 @@ func setupServerWithFakeAgent(t *testing.T) (router http.Handler, srvURL string,
 
 	waitForNodeConnected(t, r, adminAccess, node.ID)
 
-	if err := allocations.Create("alloc-1", node.ID, 25565); err != nil {
-		t.Fatalf("seed allocation: %v", err)
-	}
+	// Node creation auto-seeds default port allocations; no manual seed needed.
 
 	ownerAccess = registerAndGetAccessToken(t, r, "owner@example.com", "serverowner")
 	createServerRec := authedJSON(t, r, http.MethodPost, "/api/v1/servers", ownerAccess, createServerRequest{

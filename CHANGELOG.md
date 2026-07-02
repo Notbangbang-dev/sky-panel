@@ -2,6 +2,22 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0] - 2026-07-01
+
+### ✨ New Features
+
+- **Admin Allocations tab** — a new tab in the admin console to manage a node's port allocations: see every port (free vs. in use, and by which server), add a single port or a whole range at once, and delete free ports. Existing ports are skipped so re-adding a range is safe.
+- **Ports out of the box** — every newly registered node is automatically seeded with 50 default port allocations (25565–25614), so you can create a server on it immediately without hand-seeding the database. Add more any time from the Allocations tab.
+- **Automatic port publishing** — when a server claims an allocation, the node's daemon publishes that port on the host for both TCP and UDP (bound to all interfaces), so the server is reachable at `node-ip:port` — the same "just works" flow as other panels. (On a cloud host, make sure the port range is open in your firewall / security group.)
+
+### 🛠 Fixes
+
+- Deleting an allocation is now an atomic check-and-delete, closing a race where a port could be claimed by a new server in the instant between the "is it free?" check and the delete.
+
+### 🔗 Requires
+
+- Panel-only release — works with sky-daemon v0.2.0.
+
 ## [0.6.0] - 2026-07-01
 
 ### ✨ New Features

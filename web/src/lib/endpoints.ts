@@ -1,5 +1,6 @@
 import { apiRequest } from "./api";
 import type {
+  Allocation,
   AuditEntry,
   BackupEntry,
   CoinResult,
@@ -162,6 +163,12 @@ export const adminApi = {
   deleteNode: (id: string) => apiRequest<void>(`/api/v1/admin/nodes/${id}`, { method: "DELETE" }),
   rotateNodeToken: (id: string) =>
     apiRequest<RotateNodeTokenResult>(`/api/v1/admin/nodes/${id}/rotate-token`, { method: "POST" }),
+
+  listAllocations: (nodeId: string) => apiRequest<Allocation[]>(`/api/v1/admin/nodes/${nodeId}/allocations`),
+  createAllocations: (nodeId: string, body: { port?: number; port_start?: number; port_end?: number }) =>
+    apiRequest<{ created: number }>(`/api/v1/admin/nodes/${nodeId}/allocations`, { method: "POST", body }),
+  deleteAllocation: (allocationId: string) =>
+    apiRequest<void>(`/api/v1/admin/allocations/${allocationId}`, { method: "DELETE" }),
 
   createEgg: (input: EggInput) => apiRequest<Egg>("/api/v1/admin/eggs", { method: "POST", body: input }),
   updateEgg: (id: string, input: EggInput) => apiRequest<Egg>(`/api/v1/admin/eggs/${id}`, { method: "PUT", body: input }),

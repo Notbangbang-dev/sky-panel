@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { AdminUsersTab } from "../components/admin/AdminUsersTab";
 import { AdminNodesTab } from "../components/admin/AdminNodesTab";
+import { AdminAllocationsTab } from "../components/admin/AdminAllocationsTab";
 import { AdminEggsTab } from "../components/admin/AdminEggsTab";
 import { AdminSettingsTab } from "../components/admin/AdminSettingsTab";
 import { AdminAuditTab } from "../components/admin/AdminAuditTab";
 import { AdminBroadcastTab } from "../components/admin/AdminBroadcastTab";
 
-const TABS = ["Users", "Nodes", "Eggs", "Settings", "Audit log", "Broadcast"] as const;
+const TABS = ["Users", "Nodes", "Allocations", "Eggs", "Settings", "Audit log", "Broadcast"] as const;
 type Tab = (typeof TABS)[number];
 
 export function AdminPage() {
@@ -31,6 +32,7 @@ export function AdminPage() {
 
       {tab === "Users" && <AdminUsersTab />}
       {tab === "Nodes" && <AdminNodesTab />}
+      {tab === "Allocations" && <AdminAllocationsTab />}
       {tab === "Eggs" && <AdminEggsTab />}
       {tab === "Settings" && <AdminSettingsTab />}
       {tab === "Audit log" && <AdminAuditTab />}

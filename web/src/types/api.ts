@@ -37,6 +37,13 @@ export interface NodeSummary {
   connected: boolean;
 }
 
+export interface Allocation {
+  id: string;
+  port: number;
+  server_id?: string;
+  server_name?: string;
+}
+
 export interface EggVariable {
   name: string;
   env: string;

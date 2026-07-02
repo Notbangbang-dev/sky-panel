@@ -102,7 +102,10 @@ func NewRouter(d Deps) http.Handler {
 					r.Post("/", d.CreateNode)
 					r.Delete("/{nodeID}", d.DeleteNode)
 					r.Post("/{nodeID}/rotate-token", d.RotateNodeToken)
+					r.Get("/{nodeID}/allocations", d.AdminListAllocations)
+					r.Post("/{nodeID}/allocations", d.AdminCreateAllocations)
 				})
+				r.Delete("/admin/allocations/{allocationID}", d.AdminDeleteAllocation)
 				r.Route("/admin/eggs", func(r chi.Router) {
 					r.Post("/", d.CreateEgg)
 					r.Put("/{eggID}", d.UpdateEgg)

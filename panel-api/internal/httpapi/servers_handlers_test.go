@@ -143,7 +143,7 @@ func connectFakeNodeAgent(t *testing.T, srv *httptest.Server, nodeToken string) 
 }
 
 func TestServerLifecycleEndToEndOverHTTP(t *testing.T) {
-	router, allocations := newFullTestRouter(t)
+	router, _ := newFullTestRouter(t)
 	srv := httptest.NewServer(router)
 	defer srv.Close()
 
@@ -178,10 +178,8 @@ func TestServerLifecycleEndToEndOverHTTP(t *testing.T) {
 
 	waitForNodeConnected(t, router, adminAccess, node.ID)
 
-	// A free port allocation must exist before a server can be created.
-	if err := allocations.Create("alloc-1", node.ID, 25565); err != nil {
-		t.Fatalf("seed allocation: %v", err)
-	}
+	// Node registration auto-seeds a default block of port allocations, so a
+	// server can be created immediately without hand-seeding one here.
 
 	// Regular user registers and creates a server on the node.
 	userAccess := registerAndGetAccessToken(t, router, "user@example.com", "regularuser")

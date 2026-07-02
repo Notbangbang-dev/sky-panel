@@ -4,8 +4,14 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/google/uuid"
+
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/models"
 )
+
+// ErrAllocationInUse is returned when trying to delete an allocation that a
+// server currently holds.
+var ErrAllocationInUse = errors.New("allocation is in use by a server")
 
 type Allocations struct {
 	db *sql.DB
@@ -21,6 +27,75 @@ func (r *Allocations) Create(id, nodeID string, port int) error {
 		return ErrDuplicate
 	}
 	return err
+}
+
+// CreateRange adds every port in [start, end] as a free allocation on nodeID,
+// silently skipping ports that already exist (UNIQUE(node_id, port)). It
+// returns how many were newly created. Used both by the admin UI and to
+// auto-seed a default port range when a node is registered.
+func (r *Allocations) CreateRange(nodeID string, start, end int) (int, error) {
+	if start > end {
+		start, end = end, start
+	}
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(
+		`INSERT INTO allocations (id, node_id, port, server_id) VALUES (?, ?, ?, NULL)
+		 ON CONFLICT(node_id, port) DO NOTHING`,
+	)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+
+	created := 0
+	for p := start; p <= end; p++ {
+		res, err := stmt.Exec(uuid.NewString(), nodeID, p)
+		if err != nil {
+			return created, err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			created++
+		}
+	}
+	return created, tx.Commit()
+}
+
+// Delete removes a free allocation. It refuses (ErrAllocationInUse) if a
+// server still holds it, and returns ErrNotFound if it doesn't exist. The
+// check-and-delete is atomic (a single conditional DELETE in a transaction)
+// so a concurrent ClaimFree can't slip a server onto the port between the
+// check and the delete.
+func (r *Allocations) Delete(id string) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`DELETE FROM allocations WHERE id = ? AND server_id IS NULL`, id)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		// Nothing deleted: either the row doesn't exist, or it's in use.
+		var serverID sql.NullString
+		err := tx.QueryRow(`SELECT server_id FROM allocations WHERE id = ?`, id).Scan(&serverID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		return ErrAllocationInUse
+	}
+	return tx.Commit()
 }
 
 // ClaimFree atomically claims one free (server_id IS NULL) allocation on the
