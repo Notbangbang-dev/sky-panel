@@ -72,6 +72,13 @@ func (r *Servers) SetStatus(id string, status models.ServerStatus) error {
 	return checkRowsAffected(res, err)
 }
 
+// SetEgg changes which egg (and therefore image/startup) a server runs. Used
+// when reinstalling onto a different software stack.
+func (r *Servers) SetEgg(id, eggID string) error {
+	res, err := r.db.Exec(`UPDATE servers SET egg_id = ?, updated_at = ? WHERE id = ?`, eggID, time.Now().UTC(), id)
+	return checkRowsAffected(res, err)
+}
+
 // SetError marks a server errored and records why, so the UI can explain it.
 func (r *Servers) SetError(id, message string) error {
 	res, err := r.db.Exec(

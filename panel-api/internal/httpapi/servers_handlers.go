@@ -358,7 +358,14 @@ func (d Deps) UpdateServer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toServerResponse(updated))
 }
 
-// ReinstallServer recreates the container from its egg (files preserved).
+type reinstallServerRequest struct {
+	// EggID optionally reinstalls onto a different egg (software). Empty keeps
+	// the current one.
+	EggID string `json:"egg_id"`
+}
+
+// ReinstallServer recreates the container from its egg (files preserved),
+// optionally switching to a different egg.
 func (d Deps) ReinstallServer(w http.ResponseWriter, r *http.Request) {
 	server := d.loadServerWithPermission(w, r, models.PermSettings)
 	if server == nil {
@@ -368,7 +375,17 @@ func (d Deps) ReinstallServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "server_suspended", "this server is suspended by an administrator")
 		return
 	}
-	d.audit(r, "server.reinstall", server.ID, "")
+
+	// Body is optional (a bare POST reinstalls onto the same egg).
+	var req reinstallServerRequest
+	_ = decodeJSON(r, &req)
+	if req.EggID != "" {
+		if _, err := d.Eggs.GetByID(req.EggID); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "unknown egg")
+			return
+		}
+	}
+	d.audit(r, "server.reinstall", server.ID, req.EggID)
 
 	// Mark it installing synchronously so a client polling right after this
 	// 204 sees "installing" immediately, rather than racing the goroutine.
@@ -377,16 +394,16 @@ func (d Deps) ReinstallServer(w http.ResponseWriter, r *http.Request) {
 	// Reinstall re-pulls/recreates the container, which can take minutes; run
 	// it in the background (like create) so the request returns immediately and
 	// the server shows "installing" until it's done.
-	go func(serverID string) {
+	go func(serverID, eggID string) {
 		defer func() {
 			if p := recover(); p != nil {
 				log.Printf("server %s reinstall panicked: %v", serverID, p)
 			}
 		}()
-		if err := d.ServerSvc.ReinstallServer(serverID); err != nil {
+		if err := d.ServerSvc.ReinstallServer(serverID, eggID); err != nil {
 			log.Printf("server %s reinstall failed: %v", serverID, err)
 		}
-	}(server.ID)
+	}(server.ID, req.EggID)
 
 	w.WriteHeader(http.StatusNoContent)
 }

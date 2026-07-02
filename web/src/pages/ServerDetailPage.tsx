@@ -64,11 +64,6 @@ export function ServerDetailPage() {
     onSuccess: () => navigate("/servers"),
   });
 
-  const reinstall = useMutation({
-    mutationFn: () => serversApi.reinstall(id!),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["servers", id] }),
-  });
-
   const suspend = useMutation({
     mutationFn: (s: boolean) => (s ? adminApi.suspendServer(id!) : adminApi.unsuspendServer(id!)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["servers", id] }),
@@ -143,12 +138,8 @@ export function ServerDetailPage() {
           {canManage && (
             <button
               className="sp-btn sp-btn--danger"
-              onClick={() => {
-                if (window.confirm("Reinstall this server? The container is rebuilt from its egg. Your files are kept.")) {
-                  reinstall.mutate();
-                }
-              }}
-              disabled={reinstall.isPending || installing}
+              onClick={() => navigate(`/servers/${id}/reinstall`)}
+              disabled={installing}
             >
               {installing ? "Installing…" : "Reinstall"}
             </button>

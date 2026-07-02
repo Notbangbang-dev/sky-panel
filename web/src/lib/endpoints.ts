@@ -62,7 +62,8 @@ export const serversApi = {
       backup_interval_hours: number;
     },
   ) => apiRequest<Server>(`/api/v1/servers/${id}`, { method: "PATCH", body: input }),
-  reinstall: (id: string) => apiRequest<void>(`/api/v1/servers/${id}/reinstall`, { method: "POST" }),
+  reinstall: (id: string, eggId?: string) =>
+    apiRequest<void>(`/api/v1/servers/${id}/reinstall`, { method: "POST", body: { egg_id: eggId ?? "" } }),
   activity: (id: string) => apiRequest<AuditEntry[]>(`/api/v1/servers/${id}/activity`),
   remove: (id: string) => apiRequest<void>(`/api/v1/servers/${id}`, { method: "DELETE" }),
   power: (id: string, action: "start" | "stop" | "kill") =>

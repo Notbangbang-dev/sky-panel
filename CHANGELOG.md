@@ -2,6 +2,17 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.0] - 2026-07-02
+
+### ✨ New Features
+
+- **A dedicated Reinstall experience.** Hitting **Reinstall** now opens a full page instead of a plain confirm dialog: a clear rundown of what happens (container rebuilt, files kept, brief downtime), then a live animated "reactor" that tracks provisioning through to **complete** or a clear **failure** (with the node's error message and a one-click **Try again**).
+- **Reinstall onto a different egg.** From that page you can switch the server's software — e.g. Paper → Fabric, or a Minecraft server → a Python app — with a warning that existing files may not be compatible. The volume is preserved; only the container/image changes.
+
+### 🔗 Requires
+
+- Panel-only release — works with sky-daemon v0.3.0.
+
 ## [0.12.0] - 2026-07-02
 
 ### 🛠 Fixes

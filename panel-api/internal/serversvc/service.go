@@ -155,11 +155,26 @@ func (s *Service) UpdateServer(serverID, name string, memoryBytes int64, cpuLimi
 // ReinstallServer recreates the container from its egg, re-running the
 // image's install/startup against the (preserved) volume — a fresh
 // container without wiping the server's files.
-func (s *Service) ReinstallServer(serverID string) error {
+// If eggID is non-empty and differs from the server's current egg, the server
+// is switched onto that egg (new image/startup) before the reinstall — its
+// volume is still preserved, though the new software may not understand the
+// old data. Pass "" to reinstall onto the same egg.
+func (s *Service) ReinstallServer(serverID, eggID string) error {
 	server, err := s.Servers.GetByID(serverID)
 	if err != nil {
 		return fmt.Errorf("load server: %w", err)
 	}
+
+	if eggID != "" && eggID != server.EggID {
+		if _, err := s.Eggs.GetByID(eggID); err != nil {
+			return fmt.Errorf("load target egg: %w", err)
+		}
+		if err := s.Servers.SetEgg(serverID, eggID); err != nil {
+			return fmt.Errorf("switch egg: %w", err)
+		}
+		server.EggID = eggID
+	}
+
 	egg, err := s.Eggs.GetByID(server.EggID)
 	if err != nil {
 		return fmt.Errorf("load egg: %w", err)

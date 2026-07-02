@@ -800,6 +800,203 @@ a.sp-card:hover {
   }
 }
 
+/* ---------- Reinstall page ---------- */
+
+.sp-reinstall {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 40px;
+}
+
+.sp-reinstall__panel {
+  width: 100%;
+  max-width: 620px;
+  text-align: center;
+  padding: 32px 28px 28px;
+}
+
+.sp-reinstall__title {
+  font-size: clamp(28px, 4vw, 40px);
+  letter-spacing: -0.015em;
+  margin: 18px 0 10px;
+}
+
+.sp-reinstall__lede {
+  color: var(--sp-text-muted);
+  font-size: 14px;
+  max-width: 460px;
+  margin: 0 auto 18px;
+  line-height: 1.55;
+}
+
+.sp-reinstall__lede strong {
+  color: var(--sp-text);
+}
+
+.sp-reinstall__warn {
+  color: #ffb27a;
+  font-size: 12px;
+  max-width: 460px;
+  margin: 0 auto 16px;
+  line-height: 1.5;
+}
+
+.sp-reinstall__actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.sp-btn--lg {
+  padding: 11px 22px;
+  font-size: 14px;
+}
+
+/* The reactor — concentric spinning rings around a status core. */
+.sp-reactor {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  margin: 8px auto 4px;
+  display: grid;
+  place-items: center;
+}
+
+.sp-reactor__ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+}
+.sp-reactor__ring--1 {
+  inset: 0;
+  border-top-color: var(--sp-accent);
+  border-right-color: color-mix(in srgb, var(--sp-accent) 35%, transparent);
+  animation: sp-rotate 3.2s linear infinite;
+}
+.sp-reactor__ring--2 {
+  inset: 26px;
+  border-bottom-color: var(--sp-accent);
+  border-left-color: color-mix(in srgb, var(--sp-accent) 30%, transparent);
+  animation: sp-rotate 5s linear infinite reverse;
+}
+.sp-reactor__ring--3 {
+  inset: 52px;
+  border-top-color: color-mix(in srgb, var(--sp-accent) 60%, transparent);
+  animation: sp-rotate 8s linear infinite;
+}
+
+.sp-reactor__core {
+  width: 116px;
+  height: 116px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid var(--sp-surface-border);
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--sp-accent) 16%, transparent), transparent 72%);
+  box-shadow: 0 0 50px -14px color-mix(in srgb, var(--sp-accent) 55%, transparent);
+}
+
+.sp-reactor__glyph {
+  font-size: 22px;
+  line-height: 1;
+}
+.sp-reactor__status {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: var(--sp-text-muted);
+}
+.sp-reactor__name {
+  font-family: var(--sp-font-display);
+  font-size: 15px;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Steady, no spin, on a finished state. */
+.sp-reactor--ok .sp-reactor__ring,
+.sp-reactor--error .sp-reactor__ring,
+.sp-reactor--idle .sp-reactor__ring {
+  animation: none;
+}
+.sp-reactor--ok .sp-reactor__ring {
+  border-color: var(--sp-accent);
+}
+.sp-reactor--error .sp-reactor__ring {
+  border-color: #ff7b7b;
+}
+.sp-reactor--error .sp-reactor__core {
+  box-shadow: 0 0 50px -14px rgba(255, 120, 120, 0.6);
+  border-color: color-mix(in srgb, #ff6b6b 50%, var(--sp-surface-border));
+}
+.sp-reactor--idle .sp-reactor__ring {
+  border-color: var(--sp-surface-border);
+}
+.sp-reactor--ok .sp-reactor__glyph {
+  color: var(--sp-accent);
+}
+.sp-reactor--error .sp-reactor__glyph {
+  color: #ff9b9b;
+}
+
+@keyframes sp-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Provisioning phase checklist. */
+.sp-phases {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+  margin: 6px auto 16px;
+}
+
+.sp-phase {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--sp-font-mono);
+  font-size: 13px;
+  color: var(--sp-text-muted);
+}
+
+.sp-phase__mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--sp-surface-border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  flex: none;
+}
+
+.sp-phase.is-done {
+  color: var(--sp-text);
+}
+.sp-phase.is-done .sp-phase__mark {
+  background: var(--sp-accent);
+  color: var(--sp-accent-text);
+  border-color: transparent;
+}
+.sp-phase.is-active {
+  color: var(--sp-text);
+}
+.sp-phase.is-active .sp-phase__mark {
+  border-color: var(--sp-accent);
+  border-top-color: transparent;
+  animation: sp-spin 0.8s linear infinite;
+}
+
 /* ---------- Tables ---------- */
 
 .sp-table {

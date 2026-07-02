@@ -10,6 +10,7 @@ import { RegisterPage } from "./pages/RegisterPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ServersListPage } from "./pages/ServersListPage";
 import { ServerDetailPage } from "./pages/ServerDetailPage";
+import { ReinstallPage } from "./pages/ReinstallPage";
 import { NodesPage } from "./pages/NodesPage";
 import { AfkPage } from "./pages/AfkPage";
 import { StorePage } from "./pages/StorePage";
@@ -44,6 +45,7 @@ function App() {
             <Route path="/" element={<Shell><DashboardPage /></Shell>} />
             <Route path="/servers" element={<Shell><ServersListPage /></Shell>} />
             <Route path="/servers/:id" element={<Shell><ServerDetailPage /></Shell>} />
+            <Route path="/servers/:id/reinstall" element={<Shell><ReinstallPage /></Shell>} />
             <Route path="/nodes" element={<Shell><NodesPage /></Shell>} />
             <Route path="/wallet" element={<Shell><WalletPage /></Shell>} />
             <Route path="/store" element={<Shell><StorePage /></Shell>} />
