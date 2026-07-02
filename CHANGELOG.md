@@ -2,6 +2,12 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.4] - 2026-07-02
+
+### ✨ New Features
+
+- **A proper file manager.** The server Files tab now has a toolbar to **upload files**, **upload a whole folder** (its structure is recreated on the server), **create a new file**, and **create a new folder** — alongside the existing in-browser **edit**, **rename**, and **delete**. Files can also be **downloaded** with one click, and deletes now confirm first. Files are capped at 10 MB each (the file manager is for configs/plugins, not bulk transfer); anything larger is skipped with a clear note. No node update needed — this rides on the existing file endpoints.
+
 ## [0.15.3] - 2026-07-02
 
 ### 🛠 Fixes
