@@ -79,6 +79,7 @@ export interface Server {
   backup_interval_hours: number;
   last_backup_at?: string;
   suspended: boolean;
+  status_message?: string;
 }
 
 export interface BackupEntry {

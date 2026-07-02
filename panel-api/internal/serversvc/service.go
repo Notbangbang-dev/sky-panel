@@ -116,7 +116,7 @@ func (s *Service) Provision(serverID string, createTimeout time.Duration) error 
 		return fmt.Errorf("load egg: %w", err)
 	}
 	if err := s.provision(server, egg, createTimeout); err != nil {
-		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
+		_ = s.Servers.SetError(serverID, err.Error())
 		return err
 	}
 	return s.Servers.SetStatus(serverID, models.StatusRunning)
@@ -144,7 +144,7 @@ func (s *Service) UpdateServer(serverID, name string, memoryBytes int64, cpuLimi
 	// container may not exist if it was never started or the node was down).
 	_, _ = s.dispatch(server.NodeID, agenthub.ActionRemove, serverID, nil)
 	if err := s.provision(server, egg, defaultProvisionTimeout); err != nil {
-		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
+		_ = s.Servers.SetError(serverID, err.Error())
 		return server, err
 	}
 	_ = s.Servers.SetStatus(serverID, models.StatusRunning)
@@ -165,9 +165,12 @@ func (s *Service) ReinstallServer(serverID string) error {
 		return fmt.Errorf("load egg: %w", err)
 	}
 
+	// Show "installing" while we re-pull/recreate (may take minutes), and use
+	// the long create timeout so a retry of a failed install can finish.
+	_ = s.Servers.SetStatus(serverID, models.StatusInstalling)
 	_, _ = s.dispatch(server.NodeID, agenthub.ActionRemove, serverID, nil)
-	if err := s.provision(server, egg, defaultProvisionTimeout); err != nil {
-		_ = s.Servers.SetStatus(serverID, models.StatusErrored)
+	if err := s.provision(server, egg, ProvisionCreateTimeout); err != nil {
+		_ = s.Servers.SetError(serverID, err.Error())
 		return err
 	}
 	return s.Servers.SetStatus(serverID, models.StatusRunning)

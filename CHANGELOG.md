@@ -2,6 +2,22 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.0] - 2026-07-02
+
+### 🛠 Fixes
+
+- **The server page no longer looks stuck on "installing".** It now refreshes itself while a server is provisioning, so it moves to **running** (or **errored**) on its own — no manual reload.
+- **Errored servers explain why.** When provisioning fails, the reason from the node (e.g. `dispatch create: node is not connected`, an image-pull error, a Docker error) is captured and shown in a banner on the server page, instead of a bare "errored". Fix the cause and hit **Reinstall** to retry.
+- **Reinstall is now async too** and uses the long image-pull timeout, so retrying a failed install actually works instead of timing out.
+
+### 🎨 Improvements
+
+- Server page polish: a cleaner header with a status line and a spec strip (port · RAM · CPU · disk), an animated "provisioning" banner, and a clearer errored banner.
+
+### 🔗 Requires
+
+- Panel-only release — works with sky-daemon v0.3.0.
+
 ## [0.11.0] - 2026-07-02
 
 ### 🛠 Fixes

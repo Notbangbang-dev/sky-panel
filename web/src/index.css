@@ -728,6 +728,78 @@ a.sp-card:hover {
   letter-spacing: -0.015em;
 }
 
+/* ---------- Server detail header ---------- */
+
+.sp-detail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+/* A row of mono spec chips (port / ram / cpu / disk) under the title. */
+.sp-spec-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.sp-spec {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border: 1px solid var(--sp-surface-border);
+  border-radius: 999px;
+  font-family: var(--sp-font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--sp-text) 3%, transparent);
+}
+
+.sp-spec__k {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sp-text-muted);
+}
+
+/* ---------- Inline state banners ---------- */
+
+.sp-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  font-size: 13px;
+}
+
+.sp-banner--error {
+  border-color: color-mix(in srgb, #ff6b6b 45%, var(--sp-surface-border));
+}
+.sp-banner--error strong {
+  color: #ff9b9b;
+}
+
+.sp-spinner {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--sp-surface-border);
+  border-top-color: var(--sp-accent);
+  animation: sp-spin 0.8s linear infinite;
+}
+
+@keyframes sp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ---------- Tables ---------- */
 
 .sp-table {

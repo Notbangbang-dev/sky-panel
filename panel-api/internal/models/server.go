@@ -34,8 +34,11 @@ type Server struct {
 	// Suspended servers are stopped and their owner can't start or control
 	// them until an admin unsuspends. Admins are exempt from the block.
 	Suspended bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	// StatusMessage carries human-readable detail for the current status —
+	// e.g. why provisioning errored. Empty on healthy transitions.
+	StatusMessage string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 type Allocation struct {

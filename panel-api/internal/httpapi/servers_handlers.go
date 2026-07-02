@@ -39,6 +39,7 @@ type serverResponse struct {
 	BackupIntervalHours int               `json:"backup_interval_hours"`
 	LastBackupAt        string            `json:"last_backup_at,omitempty"`
 	Suspended           bool              `json:"suspended"`
+	StatusMessage       string            `json:"status_message,omitempty"`
 }
 
 func toServerResponse(s *models.Server) serverResponse {
@@ -46,7 +47,7 @@ func toServerResponse(s *models.Server) serverResponse {
 		ID: s.ID, OwnerID: s.OwnerID, NodeID: s.NodeID, EggID: s.EggID, Name: s.Name,
 		Status: string(s.Status), MemoryBytes: s.MemoryBytes, CPULimit: s.CPULimit, DiskBytes: s.DiskBytes,
 		PrimaryPort: s.PrimaryPort, Variables: s.Variables, BackupIntervalHours: s.BackupIntervalHours,
-		Suspended: s.Suspended,
+		Suspended: s.Suspended, StatusMessage: s.StatusMessage,
 	}
 	if s.LastBackupAt != nil {
 		resp.LastBackupAt = s.LastBackupAt.Format(rfc3339)
@@ -367,11 +368,26 @@ func (d Deps) ReinstallServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "server_suspended", "this server is suspended by an administrator")
 		return
 	}
-	if err := d.ServerSvc.ReinstallServer(server.ID); err != nil {
-		writeError(w, http.StatusBadGateway, "node_dispatch_failed", err.Error())
-		return
-	}
 	d.audit(r, "server.reinstall", server.ID, "")
+
+	// Mark it installing synchronously so a client polling right after this
+	// 204 sees "installing" immediately, rather than racing the goroutine.
+	_ = d.Servers.SetStatus(server.ID, models.StatusInstalling)
+
+	// Reinstall re-pulls/recreates the container, which can take minutes; run
+	// it in the background (like create) so the request returns immediately and
+	// the server shows "installing" until it's done.
+	go func(serverID string) {
+		defer func() {
+			if p := recover(); p != nil {
+				log.Printf("server %s reinstall panicked: %v", serverID, p)
+			}
+		}()
+		if err := d.ServerSvc.ReinstallServer(serverID); err != nil {
+			log.Printf("server %s reinstall failed: %v", serverID, err)
+		}
+	}(server.ID)
+
 	w.WriteHeader(http.StatusNoContent)
 }
 

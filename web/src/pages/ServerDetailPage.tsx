@@ -11,6 +11,7 @@ import { SharingTab } from "../components/server/SharingTab";
 import { SettingsTab } from "../components/server/SettingsTab";
 import { ActivityTab } from "../components/server/ActivityTab";
 import { BackupsTab } from "../components/server/BackupsTab";
+import { formatBytes, formatCpu } from "../lib/format";
 import type { ContainerHeartbeat } from "../types/api";
 
 interface ConsoleLine {
@@ -28,7 +29,17 @@ export function ServerDetailPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
 
-  const { data: server } = useQuery({ queryKey: ["servers", id], queryFn: () => serversApi.get(id!), enabled: !!id });
+  const { data: server } = useQuery({
+    queryKey: ["servers", id],
+    queryFn: () => serversApi.get(id!),
+    enabled: !!id,
+    // While provisioning (async — may pull an image), poll so the page moves
+    // off "installing" to running/errored on its own instead of looking stuck.
+    refetchInterval: (query) => {
+      const s = query.state.data?.status;
+      return s === "installing" || s === "stopping" ? 3000 : false;
+    },
+  });
 
   const isAdmin = user?.role === "admin";
   const canManage = !!server && !!user && (server.owner_id === user.id || isAdmin);
@@ -67,25 +78,49 @@ export function ServerDetailPage() {
 
   if (!server) return <p className="sp-mono">loading…</p>;
 
+  const installing = server.status === "installing";
+  const errored = server.status === "errored";
+
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <h1 className="sp-page-title" style={{ marginBottom: 0 }}>
-            {server.name}
-          </h1>
-          <StatusBadge status={server.status} />
-          {server.suspended && (
-            <span className="sp-badge" style={{ color: "#ff9b9b", borderColor: "#ff9b9b" }}>
-              suspended
+      <div className="sp-detail-head">
+        <div>
+          <p className="sp-kicker">Server</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <h1 className="sp-page-title" style={{ marginBottom: 0 }}>
+              {server.name}
+            </h1>
+            <StatusBadge status={server.status} />
+            {server.suspended && (
+              <span className="sp-badge" style={{ color: "#ff9b9b", borderColor: "#ff9b9b" }}>
+                suspended
+              </span>
+            )}
+          </div>
+          <div className="sp-spec-strip">
+            <span className="sp-spec">
+              <span className="sp-spec__k">port</span>
+              {server.primary_port}
             </span>
-          )}
+            <span className="sp-spec">
+              <span className="sp-spec__k">ram</span>
+              {formatBytes(server.memory_bytes)}
+            </span>
+            <span className="sp-spec">
+              <span className="sp-spec__k">cpu</span>
+              {formatCpu(server.cpu_limit)}
+            </span>
+            <span className="sp-spec">
+              <span className="sp-spec__k">disk</span>
+              {server.disk_bytes ? formatBytes(server.disk_bytes) : "—"}
+            </span>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <button
             className="sp-btn"
             onClick={() => power.mutate("start")}
-            disabled={server.suspended && !isAdmin}
+            disabled={(server.suspended && !isAdmin) || installing}
             title={server.suspended && !isAdmin ? "This server is suspended by an administrator" : undefined}
           >
             Start
@@ -113,9 +148,9 @@ export function ServerDetailPage() {
                   reinstall.mutate();
                 }
               }}
-              disabled={reinstall.isPending}
+              disabled={reinstall.isPending || installing}
             >
-              {reinstall.isPending ? "Reinstalling…" : "Reinstall"}
+              {installing ? "Installing…" : "Reinstall"}
             </button>
           )}
           <button className="sp-btn sp-btn--danger" onClick={() => remove.mutate()}>
@@ -123,6 +158,34 @@ export function ServerDetailPage() {
           </button>
         </div>
       </div>
+
+      {installing && (
+        <div className="sp-surface sp-card sp-banner" style={{ marginBottom: 16 }}>
+          <span className="sp-spinner" />
+          <div>
+            <strong>Provisioning…</strong>{" "}
+            <span style={{ color: "var(--sp-text-muted)" }}>
+              the node is creating this server. A first launch pulls the Docker image and can take a few minutes — this
+              page updates on its own.
+            </span>
+          </div>
+        </div>
+      )}
+      {errored && (
+        <div className="sp-surface sp-card sp-banner sp-banner--error" style={{ marginBottom: 16 }}>
+          <div>
+            <strong>Provisioning failed.</strong>{" "}
+            <span className="sp-mono" style={{ fontSize: 12 }}>
+              {server.status_message || "The node reported an error. Check the node's Docker/logs."}
+            </span>
+            {canManage && (
+              <div style={{ marginTop: 4, color: "var(--sp-text-muted)", fontSize: 12 }}>
+                Fix the cause on the node, then use <strong>Reinstall</strong> to retry.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="sp-grid sp-grid--cards" style={{ marginBottom: 16 }}>
         <StatCard label="CPU" value={stats ? `${stats.cpu_percent.toFixed(1)}%` : "—"} />
