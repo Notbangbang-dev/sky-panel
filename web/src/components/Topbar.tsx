@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, useMotionValue, useTransform, animate } from "framer-motion";
+import { motion, useMotionValue, animate } from "framer-motion";
 import { useAuthStore } from "../lib/authStore";
 import { authApi } from "../lib/endpoints";
 
@@ -17,7 +17,10 @@ export function Topbar({ username, coins }: { username: string; coins: number })
 
   return (
     <header className="sp-topbar sp-surface">
-      <div />
+      <span className="sp-topbar__readout">
+        <span className="sp-topbar__readout-dot" />
+        SKY&nbsp;PANEL <span className="sp-topbar__readout-sep">//</span> CONTROL DECK
+      </span>
       <div className="sp-topbar__right">
         <CoinTicker value={coins} />
         <div className="sp-topbar__user">
@@ -34,18 +37,28 @@ export function Topbar({ username, coins }: { username: string; coins: number })
 
 function CoinTicker({ value }: { value: number }) {
   const motionValue = useMotionValue(value);
-  const rounded = useTransform(motionValue, (v) => Math.round(v).toLocaleString());
-  const [display, setDisplay] = useState(rounded.get());
+  const [display, setDisplay] = useState(() => value.toLocaleString());
 
   useEffect(() => {
-    const controls = animate(motionValue, value, { duration: 0.6, ease: "easeOut" });
-    const unsubscribe = rounded.on("change", (v) => setDisplay(v));
-    return () => {
-      controls.stop();
-      unsubscribe();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
+    // In a hidden/background tab, requestAnimationFrame is paused, so a tween
+    // never progresses and would leave the counter frozen on a stale number.
+    // Show the exact value immediately in that case; only animate when the tab
+    // is actually visible.
+    if (typeof document !== "undefined" && document.hidden) {
+      motionValue.set(value);
+      setDisplay(value.toLocaleString());
+      return;
+    }
+    const controls = animate(motionValue, value, {
+      duration: 0.6,
+      ease: "easeOut",
+      onUpdate: (v) => setDisplay(Math.round(v).toLocaleString()),
+      // Snap to the exact target on finish so an interrupted tween can't leave
+      // the counter frozen on a stale number.
+      onComplete: () => setDisplay(value.toLocaleString()),
+    });
+    return () => controls.stop();
+  }, [value, motionValue]);
 
   return (
     <motion.div className="sp-coin-ticker" whileHover={{ scale: 1.03 }}>

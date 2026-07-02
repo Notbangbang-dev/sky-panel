@@ -2,6 +2,25 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.0] - 2026-07-01
+
+### 🛠 Fixes
+
+- **The coin balance in the top bar now stays live.** It refreshes on its own (and the moment you refocus the tab), so it reflects AFK earnings, purchases, and admin adjustments without a manual reload. Two underlying bugs are fixed: the panel never re-fetched your balance after login, and the animated counter could freeze on a stale number — it crashed on one code path and, in a background tab, the count-up animation was paused by the browser. It now shows the exact value immediately when the tab is hidden and animates only when visible.
+
+### 🎨 Improvements
+
+- A dramatic pass on the panel's black-and-white "control instrument" look, over the same animated background:
+  - A faint CRT **scanline** layer and stronger grain for lit-screen texture.
+  - **Instrument panel surfaces** with a lit top-edge bezel and a soft radial sheen.
+  - Bigger, more **editorial typography** — larger display-serif page titles and stat numbers, with readout-style kickers.
+  - A **glowing** coin ticker and active-nav indicator; a live "system online" status in the sidebar and a "CONTROL DECK" readout in the top bar.
+  - A sheen that sweeps across primary buttons on hover, and a staggered reveal as cards load in.
+
+### 🔗 Requires
+
+- Panel-only release — works with sky-daemon v0.2.0.
+
 ## [0.8.0] - 2026-07-01
 
 ### ✨ New Features

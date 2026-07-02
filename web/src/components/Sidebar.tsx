@@ -44,6 +44,11 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
           </nav>
         </>
       )}
+
+      <div className="sp-sidebar__status">
+        <span className="sp-sidebar__pulse" />
+        <span>system online</span>
+      </div>
     </aside>
   );
 }

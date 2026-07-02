@@ -33,6 +33,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AnimatedBackground />
+        <div className="sp-scanlines" />
         <div className="sp-grain" />
         <BrowserRouter>
           <BroadcastBanner />

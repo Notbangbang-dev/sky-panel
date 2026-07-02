@@ -111,22 +111,59 @@ button {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  opacity: 0.04;
+  opacity: 0.05;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
-/* Precision panel: a layered surface with an inset top-highlight and a
-   soft drop shadow so it reads as a lit screen rather than a flat box. */
+/* CRT-style scanlines + a slow vignette pulse — a faint "lit instrument"
+   texture over the whole viewport. Monochrome, driven by --sp-text so it
+   respects the theme. */
+.sp-scanlines {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: repeating-linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--sp-text) 3.5%, transparent) 0px,
+    color-mix(in srgb, var(--sp-text) 3.5%, transparent) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mask-image: radial-gradient(circle at 50% 40%, #000 0%, transparent 85%);
+}
+
+/* Precision panel: a layered surface with an inset top-highlight, an edge
+   sheen, and a soft drop shadow so it reads as a lit screen, not a flat box. */
 .sp-surface {
   position: relative;
   background:
-    linear-gradient(180deg, var(--sp-elevate), transparent 120px),
-    color-mix(in srgb, var(--sp-surface) 90%, transparent);
+    radial-gradient(120% 80% at 50% -10%, color-mix(in srgb, var(--sp-text) 6%, transparent), transparent 60%),
+    linear-gradient(180deg, var(--sp-elevate), transparent 140px),
+    color-mix(in srgb, var(--sp-surface) 88%, transparent);
   border: 1px solid var(--sp-surface-border);
   border-radius: var(--sp-radius);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(18px);
   box-shadow: var(--sp-panel-shadow);
+}
+
+/* Hairline top-edge highlight — the lit bezel of the panel. */
+.sp-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  border-radius: var(--sp-radius) var(--sp-radius) 0 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--sp-text) 28%, transparent) 20%,
+    color-mix(in srgb, var(--sp-text) 28%, transparent) 80%,
+    transparent
+  );
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -252,9 +289,10 @@ button {
   top: 50%;
   transform: translateY(-50%);
   width: 3px;
-  height: 15px;
+  height: 16px;
   border-radius: 999px;
   background: var(--sp-accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--sp-accent) 80%, transparent);
 }
 
 .sp-sidebar__glyph {
@@ -283,6 +321,29 @@ button {
   min-height: 56px;
 }
 
+.sp-topbar__readout {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--sp-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--sp-text-muted);
+}
+
+.sp-topbar__readout-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sp-accent);
+  box-shadow: 0 0 8px var(--sp-accent);
+}
+
+.sp-topbar__readout-sep {
+  color: color-mix(in srgb, var(--sp-text) 30%, transparent);
+}
+
 .sp-topbar__right {
   display: flex;
   align-items: center;
@@ -292,22 +353,26 @@ button {
 .sp-coin-ticker {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 13px;
+  gap: 8px;
+  padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid var(--sp-surface-border);
+  background: color-mix(in srgb, var(--sp-text) 4%, transparent);
   font-family: var(--sp-font-mono);
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
   cursor: default;
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.2s ease;
 }
 
 .sp-coin-ticker:hover {
-  border-color: var(--sp-text-muted);
+  border-color: color-mix(in srgb, var(--sp-accent) 50%, var(--sp-surface-border));
+  box-shadow: 0 0 20px -6px color-mix(in srgb, var(--sp-accent) 45%, transparent);
 }
 
 .sp-coin-ticker__glyph {
   color: var(--sp-accent);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--sp-accent) 70%, transparent));
 }
 
 .sp-topbar__user {
@@ -410,15 +475,31 @@ button {
 }
 
 .sp-btn--primary {
+  position: relative;
+  overflow: hidden;
   background: linear-gradient(180deg, color-mix(in srgb, var(--sp-accent) 92%, white), var(--sp-accent));
   color: var(--sp-accent-text);
   border-color: transparent;
   font-weight: 500;
 }
 
+/* A light sheen that sweeps across the button on hover. */
+.sp-btn--primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, 0.55) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform 0.55s ease;
+}
+
 .sp-btn--primary:hover {
   background: color-mix(in srgb, var(--sp-accent) 90%, white);
-  box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--sp-accent) 60%, transparent);
+  box-shadow: 0 8px 24px -10px color-mix(in srgb, var(--sp-accent) 70%, transparent);
+}
+
+.sp-btn--primary:hover::after {
+  transform: translateX(120%);
 }
 
 .sp-btn--danger {
@@ -500,10 +581,11 @@ a.sp-card:hover {
 
 .sp-stat__value {
   font-family: var(--sp-font-display);
-  font-size: 40px;
-  line-height: 1;
+  font-size: 52px;
+  line-height: 0.95;
   margin: 0;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 /* ---------- Badges ---------- */
@@ -557,21 +639,93 @@ a.sp-card:hover {
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 }
 
+/* Staggered entrance for grid cards — a brief orchestrated reveal on load. */
+.sp-grid--cards > * {
+  animation: sp-rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.sp-grid--cards > *:nth-child(2) {
+  animation-delay: 0.05s;
+}
+.sp-grid--cards > *:nth-child(3) {
+  animation-delay: 0.1s;
+}
+.sp-grid--cards > *:nth-child(4) {
+  animation-delay: 0.15s;
+}
+.sp-grid--cards > *:nth-child(5) {
+  animation-delay: 0.2s;
+}
+.sp-grid--cards > *:nth-child(6) {
+  animation-delay: 0.25s;
+}
+.sp-grid--cards > *:nth-child(n + 7) {
+  animation-delay: 0.3s;
+}
+
+/* ---------- Sidebar status readout ---------- */
+
+.sp-sidebar__status {
+  margin-top: auto;
+  padding: 12px 12px 4px;
+  border-top: 1px solid var(--sp-hairline);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sp-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sp-text-muted);
+}
+
+.sp-sidebar__pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sp-accent);
+  box-shadow: 0 0 8px var(--sp-accent);
+  animation: sp-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes sp-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* ---------- Page headers ---------- */
 
 .sp-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--sp-font-mono);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.22em;
   color: var(--sp-text-muted);
-  margin: 0 0 8px;
+  margin: 0 0 10px;
+}
+
+/* Leading tick before a kicker, like a readout marker. */
+.sp-kicker::before {
+  content: "";
+  width: 16px;
+  height: 1px;
+  background: var(--sp-text-muted);
 }
 
 .sp-page-title {
-  font-size: 32px;
-  margin-bottom: 20px;
-  letter-spacing: 0.01em;
+  font-size: clamp(34px, 5vw, 46px);
+  line-height: 1.02;
+  margin-bottom: 22px;
+  letter-spacing: -0.015em;
 }
 
 /* ---------- Tables ---------- */
