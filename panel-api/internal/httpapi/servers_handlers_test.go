@@ -13,9 +13,11 @@ import (
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/agenthub"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/auth"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/coinsvc"
+	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/quotasvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/repo"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/serversvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/store"
+	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/storesvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/wshub"
 )
 
@@ -45,6 +47,8 @@ func newFullTestRouter(t *testing.T) (http.Handler, *repo.Allocations) {
 	ledger := repo.NewLedger(db)
 	afk := repo.NewAFKState(db)
 	dailyRewards := repo.NewDailyRewards(db)
+	quotas := repo.NewQuotas(db)
+	settings := repo.NewSettings(db)
 	hub := wshub.NewHub()
 
 	registry := agenthub.NewRegistry()
@@ -60,10 +64,13 @@ func newFullTestRouter(t *testing.T) (http.Handler, *repo.Allocations) {
 		Servers:       servers,
 		Allocations:   allocations,
 		Subusers:      subusers,
+		Quotas:        quotas,
 		ServerSvc:     serversvc.NewService(servers, eggs, nodes, allocations, registry),
 		AgentHub:      agentHandler,
 		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards),
-		Settings:      repo.NewSettings(db),
+		QuotaSvc:      quotasvc.NewService(servers, quotas, settings),
+		StoreSvc:      storesvc.NewService(ledger, quotas),
+		Settings:      settings,
 		Audit:         repo.NewAudit(db),
 		RefreshTTL:    30 * 24 * time.Hour,
 	}

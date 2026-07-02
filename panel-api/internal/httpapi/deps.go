@@ -6,8 +6,10 @@ import (
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/agenthub"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/auth"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/coinsvc"
+	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/quotasvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/repo"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/serversvc"
+	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/storesvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/wshub"
 )
 
@@ -25,9 +27,12 @@ type Deps struct {
 	Servers     *repo.Servers
 	Allocations *repo.Allocations
 	Subusers    *repo.Subusers
+	Quotas      *repo.Quotas
 	ServerSvc   *serversvc.Service
 	AgentHub    *agenthub.Handler
 	CoinSvc     *coinsvc.Service
+	QuotaSvc    *quotasvc.Service
+	StoreSvc    *storesvc.Service
 	Settings    *repo.Settings
 	Audit       *repo.Audit
 

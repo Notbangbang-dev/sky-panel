@@ -12,6 +12,7 @@ import { ServersListPage } from "./pages/ServersListPage";
 import { ServerDetailPage } from "./pages/ServerDetailPage";
 import { NodesPage } from "./pages/NodesPage";
 import { AfkPage } from "./pages/AfkPage";
+import { StorePage } from "./pages/StorePage";
 import { WalletPage } from "./pages/WalletPage";
 import { AccountPage } from "./pages/AccountPage";
 import { ThemeBuilderPage } from "./pages/ThemeBuilderPage";
@@ -44,6 +45,7 @@ function App() {
             <Route path="/servers/:id" element={<Shell><ServerDetailPage /></Shell>} />
             <Route path="/nodes" element={<Shell><NodesPage /></Shell>} />
             <Route path="/wallet" element={<Shell><WalletPage /></Shell>} />
+            <Route path="/store" element={<Shell><StorePage /></Shell>} />
             <Route path="/afk" element={<Shell><AfkPage /></Shell>} />
             <Route path="/account" element={<Shell><AccountPage /></Shell>} />
             <Route path="/account/theme" element={<Shell><ThemeBuilderPage /></Shell>} />

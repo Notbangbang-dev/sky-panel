@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { eggsApi, nodesApi, serversApi } from "../lib/endpoints";
 import { StatusBadge } from "../components/StatusBadge";
+import { QuotaMeters } from "../components/QuotaMeters";
+import { bytesPerMB } from "../lib/format";
 import { ApiError } from "../lib/api";
 
 export function ServersListPage() {
@@ -16,7 +18,8 @@ export function ServersListPage() {
   const [nodeId, setNodeId] = useState("");
   const [eggId, setEggId] = useState("");
   const [memoryMb, setMemoryMb] = useState(1024);
-  const [cpuLimit, setCpuLimit] = useState(0);
+  const [cpuLimit, setCpuLimit] = useState(100);
+  const [diskMb, setDiskMb] = useState(5120);
   const [variables, setVariables] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -39,12 +42,14 @@ export function ServersListPage() {
         node_id: nodeId,
         egg_id: eggId,
         name,
-        memory_bytes: memoryMb * 1024 * 1024,
+        memory_bytes: memoryMb * bytesPerMB,
         cpu_limit: cpuLimit,
+        disk_bytes: diskMb * bytesPerMB,
         variables,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["servers"] });
+      queryClient.invalidateQueries({ queryKey: ["quota"] });
       setShowForm(false);
       setName("");
     },
@@ -130,6 +135,27 @@ export function ServersListPage() {
             />
             <p className="sp-mono" style={{ fontSize: 12, color: "var(--sp-text-muted)", marginTop: 6 }}>
               0 = unlimited · 100 = one full core · 200 = two cores
+            </p>
+          </div>
+          <div className="sp-field">
+            <label className="sp-label">Disk (MB)</label>
+            <input
+              className="sp-input"
+              type="number"
+              value={diskMb}
+              onChange={(e) => setDiskMb(Number(e.target.value))}
+              min={0}
+              step={1}
+            />
+          </div>
+
+          <div className="sp-field">
+            <label className="sp-label">Your quota</label>
+            <div className="sp-surface" style={{ padding: 14 }}>
+              <QuotaMeters compact />
+            </div>
+            <p className="sp-mono" style={{ fontSize: 12, color: "var(--sp-text-muted)", marginTop: 6 }}>
+              Need more? Buy quota upgrades in the Store with coins earned on the AFK page.
             </p>
           </div>
 

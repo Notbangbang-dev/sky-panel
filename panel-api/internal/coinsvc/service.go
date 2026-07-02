@@ -28,6 +28,12 @@ const (
 
 var ErrDailyRewardAlreadyClaimed = errors.New("daily reward already claimed")
 
+// ErrAFKSessionElsewhere means another browser tab currently owns this user's
+// AFK session, so this heartbeat is not allowed to earn. The active session
+// must go stale (no heartbeat for AFKHeartbeatMaxInterval) before another tab
+// can take over — this is what stops a user farming coins in many tabs.
+var ErrAFKSessionElsewhere = errors.New("afk session active in another tab")
+
 type Service struct {
 	Users        *repo.Users
 	Ledger       *repo.Ledger
@@ -50,39 +56,67 @@ func (s *Service) clock() time.Time {
 	return time.Now().UTC()
 }
 
-// Heartbeat records one AFK-page heartbeat for userID and returns how many
-// coins (if any) were credited plus the resulting balance. A credit of 0 is
-// not an error — it just means this particular heartbeat was too soon after
-// the last one, or came after too long a gap to count as continuous.
-func (s *Service) Heartbeat(userID string) (credited, balance int64, err error) {
+// HeartbeatResult is what a single AFK heartbeat produced.
+type HeartbeatResult struct {
+	Credited       int64
+	Balance        int64
+	SessionStarted time.Time
+}
+
+// Heartbeat records one AFK-page heartbeat for userID from a specific browser
+// tab (sessionID) and returns how many coins (if any) were credited, the
+// resulting balance, and when the current earning session began.
+//
+// Only one session earns at a time. If a different session is still fresh
+// (has beaten within AFKHeartbeatMaxInterval), this heartbeat is rejected with
+// ErrAFKSessionElsewhere and earns nothing — that's the multi-tab guard. Once
+// the active session goes stale, the next heartbeat (from any tab) takes over
+// and starts a fresh session. A credit of 0 is not an error: it just means
+// this beat was too soon after the last, or the session had just started.
+func (s *Service) Heartbeat(userID, sessionID string) (HeartbeatResult, error) {
 	now := s.clock()
 
-	last, found, err := s.AFK.LastHeartbeat(userID)
+	prev, found, err := s.AFK.Get(userID)
 	if err != nil {
-		return 0, 0, err
+		return HeartbeatResult{}, err
 	}
 
-	if found {
-		elapsed := now.Sub(last)
-		if elapsed >= AFKHeartbeatMinInterval && elapsed <= AFKHeartbeatMaxInterval {
+	// Is a session currently live (someone beat recently)?
+	sessionLive := found && prev.SessionID != "" && now.Sub(prev.LastHeartbeat) <= AFKHeartbeatMaxInterval
+
+	if sessionLive && prev.SessionID != sessionID {
+		return HeartbeatResult{}, ErrAFKSessionElsewhere
+	}
+
+	// This tab continues the live session, or (re)starts one if none is live.
+	continuing := sessionLive && prev.SessionID == sessionID
+	sessionStarted := now
+	var credited int64
+	if continuing {
+		sessionStarted = prev.SessionStartedAt
+		if elapsed := now.Sub(prev.LastHeartbeat); elapsed >= AFKHeartbeatMinInterval && elapsed <= AFKHeartbeatMaxInterval {
 			credited = AFKCoinsPerHeartbeat
 		}
 	}
 
-	if err := s.AFK.SetLastHeartbeat(userID, now); err != nil {
-		return 0, 0, err
+	if err := s.AFK.Set(userID, sessionID, now, sessionStarted); err != nil {
+		return HeartbeatResult{}, err
 	}
 
-	if credited == 0 {
+	balance := int64(0)
+	if credited > 0 {
+		balance, err = s.Ledger.AddEntry(userID, credited, models.ReasonAFKAccrual, "")
+		if err != nil {
+			return HeartbeatResult{}, err
+		}
+	} else {
 		balance, err = s.balance(userID)
-		return 0, balance, err
+		if err != nil {
+			return HeartbeatResult{}, err
+		}
 	}
 
-	balance, err = s.Ledger.AddEntry(userID, credited, models.ReasonAFKAccrual, "")
-	if err != nil {
-		return 0, 0, err
-	}
-	return credited, balance, nil
+	return HeartbeatResult{Credited: credited, Balance: balance, SessionStarted: sessionStarted}, nil
 }
 
 // ClaimDailyReward credits DailyRewardAmount coins if at least

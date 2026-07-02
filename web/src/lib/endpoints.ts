@@ -6,13 +6,16 @@ import type {
   CreateNodeResult,
   Egg,
   EggVariable,
+  HeartbeatResult,
   ListFilesResult,
   Node,
   NodeSummary,
   Permission,
+  QuotaInfo,
   ReadFileResult,
   RotateNodeTokenResult,
   Server,
+  StoreItem,
   Subuser,
   TokenPair,
   TotpSetup,
@@ -43,6 +46,7 @@ export const serversApi = {
     name: string;
     memory_bytes: number;
     cpu_limit?: number;
+    disk_bytes?: number;
     variables?: Record<string, string>;
   }) => apiRequest<Server>("/api/v1/servers", { method: "POST", body: input }),
   update: (
@@ -51,6 +55,7 @@ export const serversApi = {
       name: string;
       memory_bytes: number;
       cpu_limit: number;
+      disk_bytes: number;
       variables?: Record<string, string>;
       backup_interval_hours: number;
     },
@@ -113,8 +118,22 @@ export const nodesApi = {
 
 export const coinsApi = {
   wallet: () => apiRequest<Wallet>("/api/v1/wallet"),
-  heartbeat: () => apiRequest<CoinResult>("/api/v1/afk/heartbeat", { method: "POST" }),
+  heartbeat: (sessionId: string) =>
+    apiRequest<HeartbeatResult>("/api/v1/afk/heartbeat", { method: "POST", body: { session_id: sessionId } }),
   claimDaily: () => apiRequest<CoinResult>("/api/v1/daily-reward/claim", { method: "POST" }),
+};
+
+export const quotaApi = {
+  mine: () => apiRequest<QuotaInfo>("/api/v1/me/quota"),
+};
+
+export const storeApi = {
+  list: () => apiRequest<StoreItem[]>("/api/v1/store"),
+  purchase: (itemId: string) =>
+    apiRequest<{ item_id: string; balance: number }>("/api/v1/store/purchase", {
+      method: "POST",
+      body: { item_id: itemId },
+    }),
 };
 
 export interface EggInput {
@@ -134,6 +153,8 @@ export const adminApi = {
   deleteUser: (userId: string) => apiRequest<void>(`/api/v1/admin/users/${userId}`, { method: "DELETE" }),
   adjustCoins: (userId: string, amount: number, note?: string) =>
     apiRequest<CoinResult>(`/api/v1/admin/users/${userId}/coins/adjust`, { method: "POST", body: { amount, note } }),
+  setUserQuota: (userId: string, quota: { memory_bytes: number; cpu_percent: number; disk_bytes: number }) =>
+    apiRequest<QuotaInfo>(`/api/v1/admin/users/${userId}/quota`, { method: "PUT", body: quota }),
 
   listNodes: () => apiRequest<Node[]>("/api/v1/admin/nodes"),
   createNode: (name: string, address: string) =>

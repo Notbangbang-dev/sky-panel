@@ -14,6 +14,16 @@ type coinResultResponse struct {
 	Balance  int64 `json:"balance"`
 }
 
+type heartbeatRequest struct {
+	SessionID string `json:"session_id"`
+}
+
+type heartbeatResponse struct {
+	Credited       int64  `json:"credited"`
+	Balance        int64  `json:"balance"`
+	SessionStarted string `json:"session_started_at"`
+}
+
 func (d Deps) AFKHeartbeat(w http.ResponseWriter, r *http.Request) {
 	claims, ok := auth.FromContext(r.Context())
 	if !ok {
@@ -21,12 +31,25 @@ func (d Deps) AFKHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	credited, balance, err := d.CoinSvc.Heartbeat(claims.UserID)
+	var req heartbeatRequest
+	if err := decodeJSON(r, &req); err != nil || req.SessionID == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "session_id is required")
+		return
+	}
+
+	result, err := d.CoinSvc.Heartbeat(claims.UserID, req.SessionID)
+	if errors.Is(err, coinsvc.ErrAFKSessionElsewhere) {
+		writeError(w, http.StatusConflict, "afk_session_active_elsewhere",
+			"an AFK session is already running in another tab or window")
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to record heartbeat")
 		return
 	}
-	writeJSON(w, http.StatusOK, coinResultResponse{Credited: credited, Balance: balance})
+	writeJSON(w, http.StatusOK, heartbeatResponse{
+		Credited: result.Credited, Balance: result.Balance, SessionStarted: result.SessionStarted.Format(rfc3339),
+	})
 }
 
 func (d Deps) ClaimDailyReward(w http.ResponseWriter, r *http.Request) {

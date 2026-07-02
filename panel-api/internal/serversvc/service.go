@@ -42,7 +42,7 @@ var ErrCommandFailed = fmt.Errorf("node reported command failure")
 // asks the node to create + start the container. The server row is
 // persisted regardless of whether the node ack succeeds, so a failure is
 // visible/retryable rather than silently vanishing.
-func (s *Service) CreateServer(ownerID, nodeID, eggID, name string, memoryBytes int64, cpuLimit int, overrides map[string]string) (*models.Server, error) {
+func (s *Service) CreateServer(ownerID, nodeID, eggID, name string, memoryBytes int64, cpuLimit int, diskBytes int64, overrides map[string]string) (*models.Server, error) {
 	egg, err := s.Eggs.GetByID(eggID)
 	if err != nil {
 		return nil, fmt.Errorf("load egg: %w", err)
@@ -67,6 +67,7 @@ func (s *Service) CreateServer(ownerID, nodeID, eggID, name string, memoryBytes 
 		Status:      models.StatusInstalling,
 		MemoryBytes: memoryBytes,
 		CPULimit:    cpuLimit,
+		DiskBytes:   diskBytes,
 		Variables:   overrides,
 		CreatedAt:   now,
 		UpdatedAt:   now,
@@ -99,8 +100,8 @@ func (s *Service) CreateServer(ownerID, nodeID, eggID, name string, memoryBytes 
 // variables, backup schedule) and re-provisions the container so the new
 // spec takes effect. The server's volume (and therefore its data) is
 // preserved — only the container is recreated.
-func (s *Service) UpdateServer(serverID, name string, memoryBytes int64, cpuLimit int, overrides map[string]string, backupIntervalHours int) (*models.Server, error) {
-	if err := s.Servers.UpdateSettings(serverID, name, memoryBytes, cpuLimit, overrides, backupIntervalHours); err != nil {
+func (s *Service) UpdateServer(serverID, name string, memoryBytes int64, cpuLimit int, diskBytes int64, overrides map[string]string, backupIntervalHours int) (*models.Server, error) {
+	if err := s.Servers.UpdateSettings(serverID, name, memoryBytes, cpuLimit, diskBytes, overrides, backupIntervalHours); err != nil {
 		return nil, fmt.Errorf("persist settings: %w", err)
 	}
 

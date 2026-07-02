@@ -30,6 +30,34 @@ func TestUpdateServerSettings(t *testing.T) {
 	}
 }
 
+func TestUpdateServerPreservesOmittedResources(t *testing.T) {
+	router, _, _, ownerAccess, server := setupServerWithFakeAgent(t)
+
+	// First set concrete CPU + disk allocations.
+	first := authedJSON(t, router, http.MethodPatch, "/api/v1/servers/"+server.ID, ownerAccess, updateServerRequest{
+		Name: "Sized", MemoryBytes: 1024 * 1024 * 1024, CPULimit: 120, DiskBytes: 3 * 1024 * 1024 * 1024,
+	})
+	if first.Code != http.StatusOK {
+		t.Fatalf("first update: expected 200, got %d: %s", first.Code, first.Body.String())
+	}
+
+	// A second update that omits cpu_limit/disk_bytes must NOT zero them out.
+	second := authedJSON(t, router, http.MethodPatch, "/api/v1/servers/"+server.ID, ownerAccess, updateServerRequest{
+		Name: "Renamed Again", MemoryBytes: 1024 * 1024 * 1024,
+	})
+	if second.Code != http.StatusOK {
+		t.Fatalf("second update: expected 200, got %d: %s", second.Code, second.Body.String())
+	}
+	var updated serverResponse
+	decodeBody(t, second, &updated)
+	if updated.CPULimit != 120 {
+		t.Errorf("CPU limit was clobbered: expected 120, got %d", updated.CPULimit)
+	}
+	if updated.DiskBytes != 3*1024*1024*1024 {
+		t.Errorf("disk was clobbered: expected 3 GB, got %d", updated.DiskBytes)
+	}
+}
+
 func TestReinstallServer(t *testing.T) {
 	router, _, _, ownerAccess, server := setupServerWithFakeAgent(t)
 

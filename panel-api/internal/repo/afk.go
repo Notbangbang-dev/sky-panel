@@ -14,24 +14,44 @@ func NewAFKState(db *sql.DB) *AFKState {
 	return &AFKState{db: db}
 }
 
-// LastHeartbeat returns the time of userID's last recorded AFK heartbeat, or
-// found=false if they have never sent one.
-func (r *AFKState) LastHeartbeat(userID string) (t time.Time, found bool, err error) {
-	err = r.db.QueryRow(`SELECT last_heartbeat_at FROM afk_state WHERE user_id = ?`, userID).Scan(&t)
-	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, false, nil
-	}
-	if err != nil {
-		return time.Time{}, false, err
-	}
-	return t, true, nil
+// AFKSession is the persisted state of a user's AFK earning session: when they
+// last checked in, and which browser tab ("session") owns the session. Only
+// one session earns at a time — see coinsvc.Heartbeat.
+type AFKSession struct {
+	LastHeartbeat    time.Time
+	SessionID        string
+	SessionStartedAt time.Time
 }
 
-func (r *AFKState) SetLastHeartbeat(userID string, t time.Time) error {
+// Get returns userID's AFK session state, or found=false if they've never
+// sent a heartbeat.
+func (r *AFKState) Get(userID string) (sess AFKSession, found bool, err error) {
+	var startedAt sql.NullTime
+	err = r.db.QueryRow(
+		`SELECT last_heartbeat_at, session_id, session_started_at FROM afk_state WHERE user_id = ?`,
+		userID,
+	).Scan(&sess.LastHeartbeat, &sess.SessionID, &startedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AFKSession{}, false, nil
+	}
+	if err != nil {
+		return AFKSession{}, false, err
+	}
+	if startedAt.Valid {
+		sess.SessionStartedAt = startedAt.Time
+	}
+	return sess, true, nil
+}
+
+// Set upserts a user's AFK session state.
+func (r *AFKState) Set(userID, sessionID string, lastHeartbeat, sessionStartedAt time.Time) error {
 	_, err := r.db.Exec(
-		`INSERT INTO afk_state (user_id, last_heartbeat_at) VALUES (?, ?)
-		 ON CONFLICT(user_id) DO UPDATE SET last_heartbeat_at = excluded.last_heartbeat_at`,
-		userID, t,
+		`INSERT INTO afk_state (user_id, last_heartbeat_at, session_id, session_started_at) VALUES (?, ?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET
+		   last_heartbeat_at  = excluded.last_heartbeat_at,
+		   session_id         = excluded.session_id,
+		   session_started_at = excluded.session_started_at`,
+		userID, lastHeartbeat, sessionID, sessionStartedAt,
 	)
 	return err
 }

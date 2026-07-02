@@ -12,9 +12,11 @@ import (
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/coinsvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/config"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/httpapi"
+	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/quotasvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/repo"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/serversvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/store"
+	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/storesvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/wshub"
 )
 
@@ -37,6 +39,7 @@ func main() {
 	ledger := repo.NewLedger(db)
 	afk := repo.NewAFKState(db)
 	dailyRewards := repo.NewDailyRewards(db)
+	quotas := repo.NewQuotas(db)
 	settings := repo.NewSettings(db)
 	auditLog := repo.NewAudit(db)
 
@@ -54,9 +57,12 @@ func main() {
 		Servers:       servers,
 		Allocations:   allocations,
 		Subusers:      subusers,
+		Quotas:        quotas,
 		ServerSvc:     serverSvc,
 		AgentHub:      agentHandler,
 		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards),
+		QuotaSvc:      quotasvc.NewService(servers, quotas, settings),
+		StoreSvc:      storesvc.NewService(ledger, quotas),
 		Settings:      settings,
 		Audit:         auditLog,
 		RefreshTTL:    cfg.RefreshTTL,

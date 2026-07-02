@@ -6,6 +6,8 @@ const (
 	ReasonDailyReward     = "daily_reward"
 	ReasonAFKAccrual      = "afk_accrual"
 	ReasonAdminAdjustment = "admin_adjustment"
+	ReasonStorePurchase   = "store_purchase"
+	ReasonStoreRefund     = "store_refund"
 )
 
 type LedgerEntry struct {

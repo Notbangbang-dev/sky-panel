@@ -42,6 +42,7 @@ func NewRouter(d Deps) http.Handler {
 			r.Use(auth.RequireAuth(d.JWT))
 
 			r.Get("/me", d.Me)
+			r.Get("/me/quota", d.MyQuota)
 			r.Post("/me/totp/setup", d.TOTPSetup)
 			r.Post("/me/totp/confirm", d.TOTPConfirm)
 			r.Post("/me/totp/disable", d.TOTPDisable)
@@ -82,12 +83,16 @@ func NewRouter(d Deps) http.Handler {
 			r.Post("/afk/heartbeat", d.AFKHeartbeat)
 			r.Post("/daily-reward/claim", d.ClaimDailyReward)
 
+			r.Get("/store", d.ListStore)
+			r.Post("/store/purchase", d.PurchaseStoreItem)
+
 			r.Group(func(r chi.Router) {
 				r.Use(auth.RequireRole(string(models.RoleAdmin)))
 
 				r.Route("/admin/users", func(r chi.Router) {
 					r.Get("/", d.AdminListUsers)
 					r.Post("/{userID}/coins/adjust", d.AdminAdjustCoins)
+					r.Put("/{userID}/quota", d.AdminSetUserQuota)
 					r.Post("/{userID}/role", d.AdminSetUserRole)
 					r.Delete("/{userID}", d.AdminDeleteUser)
 				})

@@ -106,7 +106,7 @@ func TestCreateServerHappyPath(t *testing.T) {
 		t.Fatalf("seed allocation: %v", err)
 	}
 
-	server, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "My Server", 1024*1024*1024, 0, nil)
+	server, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "My Server", 1024*1024*1024, 0, 0, nil)
 	if err != nil {
 		t.Fatalf("CreateServer: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestCreateServerNoFreeAllocation(t *testing.T) {
 	egg := seedEgg(t, eggs)
 	owner := seedUser(t, users)
 
-	if _, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "My Server", 1024, 0, nil); err == nil {
+	if _, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "My Server", 1024, 0, 0, nil); err == nil {
 		t.Error("expected CreateServer to fail with no free allocations")
 	}
 }
@@ -172,7 +172,7 @@ func TestCreateServerDispatchFailureMarksErrored(t *testing.T) {
 		t.Fatalf("seed allocation: %v", err)
 	}
 
-	server, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "My Server", 1024, 0, nil)
+	server, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "My Server", 1024, 0, 0, nil)
 	if err == nil {
 		t.Fatal("expected CreateServer to surface the dispatch error")
 	}
@@ -200,7 +200,7 @@ func TestPowerActionUpdatesStatus(t *testing.T) {
 		t.Fatalf("seed allocation: %v", err)
 	}
 
-	server, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "My Server", 1024, 0, nil)
+	server, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "My Server", 1024, 0, 0, nil)
 	if err != nil {
 		t.Fatalf("CreateServer: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestDeleteServerReleasesAllocation(t *testing.T) {
 		t.Fatalf("seed allocation: %v", err)
 	}
 
-	server, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "My Server", 1024, 0, nil)
+	server, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "My Server", 1024, 0, 0, nil)
 	if err != nil {
 		t.Fatalf("CreateServer: %v", err)
 	}

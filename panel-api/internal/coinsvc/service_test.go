@@ -46,77 +46,115 @@ func newTestServiceAndUser(t *testing.T) (*Service, *fakeClock, string) {
 	return svc, clock, u.ID
 }
 
+const testSession = "tab-1"
+
 func TestHeartbeatFirstCallCreditsNothingButRecordsState(t *testing.T) {
 	svc, _, userID := newTestServiceAndUser(t)
 
-	credited, balance, err := svc.Heartbeat(userID)
+	res, err := svc.Heartbeat(userID, testSession)
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
-	if credited != 0 {
-		t.Errorf("expected 0 credited on first heartbeat, got %d", credited)
+	if res.Credited != 0 {
+		t.Errorf("expected 0 credited on first heartbeat, got %d", res.Credited)
 	}
-	if balance != 0 {
-		t.Errorf("expected balance 0, got %d", balance)
+	if res.Balance != 0 {
+		t.Errorf("expected balance 0, got %d", res.Balance)
 	}
 }
 
 func TestHeartbeatWithinWindowCredits(t *testing.T) {
 	svc, clock, userID := newTestServiceAndUser(t)
 
-	svc.Heartbeat(userID) // establishes baseline
+	svc.Heartbeat(userID, testSession) // establishes baseline
 	clock.advance(30 * time.Second)
 
-	credited, balance, err := svc.Heartbeat(userID)
+	res, err := svc.Heartbeat(userID, testSession)
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
-	if credited != AFKCoinsPerHeartbeat {
-		t.Errorf("expected %d credited, got %d", AFKCoinsPerHeartbeat, credited)
+	if res.Credited != AFKCoinsPerHeartbeat {
+		t.Errorf("expected %d credited, got %d", AFKCoinsPerHeartbeat, res.Credited)
 	}
-	if balance != AFKCoinsPerHeartbeat {
-		t.Errorf("expected balance %d, got %d", AFKCoinsPerHeartbeat, balance)
+	if res.Balance != AFKCoinsPerHeartbeat {
+		t.Errorf("expected balance %d, got %d", AFKCoinsPerHeartbeat, res.Balance)
 	}
 }
 
 func TestHeartbeatTooSoonDoesNotCredit(t *testing.T) {
 	svc, clock, userID := newTestServiceAndUser(t)
 
-	svc.Heartbeat(userID)
+	svc.Heartbeat(userID, testSession)
 	clock.advance(5 * time.Second) // well under AFKHeartbeatMinInterval
 
-	credited, _, err := svc.Heartbeat(userID)
+	res, err := svc.Heartbeat(userID, testSession)
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
-	if credited != 0 {
-		t.Errorf("expected 0 credited for a too-soon heartbeat, got %d", credited)
+	if res.Credited != 0 {
+		t.Errorf("expected 0 credited for a too-soon heartbeat, got %d", res.Credited)
 	}
 }
 
 func TestHeartbeatTooLongGapDoesNotCredit(t *testing.T) {
 	svc, clock, userID := newTestServiceAndUser(t)
 
-	svc.Heartbeat(userID)
+	svc.Heartbeat(userID, testSession)
 	clock.advance(10 * time.Minute) // well over AFKHeartbeatMaxInterval
 
-	credited, _, err := svc.Heartbeat(userID)
+	res, err := svc.Heartbeat(userID, testSession)
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
-	if credited != 0 {
-		t.Errorf("expected 0 credited after a lapsed session, got %d", credited)
+	if res.Credited != 0 {
+		t.Errorf("expected 0 credited after a lapsed session, got %d", res.Credited)
 	}
 
 	// But the session should have restarted cleanly: the next in-window
 	// heartbeat credits normally.
 	clock.advance(30 * time.Second)
-	credited, _, err = svc.Heartbeat(userID)
+	res, err = svc.Heartbeat(userID, testSession)
 	if err != nil {
 		t.Fatalf("Heartbeat: %v", err)
 	}
-	if credited != AFKCoinsPerHeartbeat {
-		t.Errorf("expected session to restart and credit normally, got %d", credited)
+	if res.Credited != AFKCoinsPerHeartbeat {
+		t.Errorf("expected session to restart and credit normally, got %d", res.Credited)
+	}
+}
+
+func TestHeartbeatRejectsSecondConcurrentTab(t *testing.T) {
+	svc, clock, userID := newTestServiceAndUser(t)
+
+	// Tab A owns the session.
+	svc.Heartbeat(userID, "tab-A")
+	clock.advance(30 * time.Second)
+
+	// Tab B tries to earn while A is still fresh — rejected, no credit.
+	if _, err := svc.Heartbeat(userID, "tab-B"); !errors.Is(err, ErrAFKSessionElsewhere) {
+		t.Fatalf("expected ErrAFKSessionElsewhere for a second tab, got %v", err)
+	}
+
+	// Tab A keeps earning.
+	res, err := svc.Heartbeat(userID, "tab-A")
+	if err != nil {
+		t.Fatalf("Heartbeat A: %v", err)
+	}
+	if res.Credited != AFKCoinsPerHeartbeat {
+		t.Errorf("expected tab A to keep earning, got %d", res.Credited)
+	}
+
+	// Once A goes stale, B can take over on its next beat.
+	clock.advance(10 * time.Minute)
+	if _, err := svc.Heartbeat(userID, "tab-B"); err != nil {
+		t.Fatalf("expected tab B to take over a stale session, got %v", err)
+	}
+	clock.advance(30 * time.Second)
+	res, err = svc.Heartbeat(userID, "tab-B")
+	if err != nil {
+		t.Fatalf("Heartbeat B: %v", err)
+	}
+	if res.Credited != AFKCoinsPerHeartbeat {
+		t.Errorf("expected tab B to earn after takeover, got %d", res.Credited)
 	}
 }
 

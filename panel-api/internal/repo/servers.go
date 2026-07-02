@@ -17,7 +17,7 @@ func NewServers(db *sql.DB) *Servers {
 	return &Servers{db: db}
 }
 
-const serverColumns = `id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, variables_json, primary_port, backup_interval_hours, last_backup_at, created_at, updated_at`
+const serverColumns = `id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, disk_bytes, variables_json, primary_port, backup_interval_hours, last_backup_at, created_at, updated_at`
 
 func (r *Servers) Create(s *models.Server) error {
 	varsJSON, err := json.Marshal(s.Variables)
@@ -25,9 +25,9 @@ func (r *Servers) Create(s *models.Server) error {
 		return err
 	}
 	_, err = r.db.Exec(
-		`INSERT INTO servers (id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, variables_json, primary_port, backup_interval_hours, last_backup_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.ID, s.OwnerID, s.NodeID, s.EggID, s.Name, s.ContainerID, string(s.Status), s.MemoryBytes, s.CPULimit, varsJSON, s.PrimaryPort, s.BackupIntervalHours, s.LastBackupAt, s.CreatedAt, s.UpdatedAt,
+		`INSERT INTO servers (id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, disk_bytes, variables_json, primary_port, backup_interval_hours, last_backup_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.OwnerID, s.NodeID, s.EggID, s.Name, s.ContainerID, string(s.Status), s.MemoryBytes, s.CPULimit, s.DiskBytes, varsJSON, s.PrimaryPort, s.BackupIntervalHours, s.LastBackupAt, s.CreatedAt, s.UpdatedAt,
 	)
 	return err
 }
@@ -72,14 +72,14 @@ func (r *Servers) SetStatus(id string, status models.ServerStatus) error {
 
 // UpdateSettings applies user-editable settings (name, resource limits,
 // egg variable overrides, and backup schedule) to an existing server.
-func (r *Servers) UpdateSettings(id, name string, memoryBytes int64, cpuLimit int, variables map[string]string, backupIntervalHours int) error {
+func (r *Servers) UpdateSettings(id, name string, memoryBytes int64, cpuLimit int, diskBytes int64, variables map[string]string, backupIntervalHours int) error {
 	varsJSON, err := json.Marshal(variables)
 	if err != nil {
 		return err
 	}
 	res, err := r.db.Exec(
-		`UPDATE servers SET name = ?, memory_bytes = ?, cpu_limit = ?, variables_json = ?, backup_interval_hours = ?, updated_at = ? WHERE id = ?`,
-		name, memoryBytes, cpuLimit, varsJSON, backupIntervalHours, time.Now().UTC(), id,
+		`UPDATE servers SET name = ?, memory_bytes = ?, cpu_limit = ?, disk_bytes = ?, variables_json = ?, backup_interval_hours = ?, updated_at = ? WHERE id = ?`,
+		name, memoryBytes, cpuLimit, diskBytes, varsJSON, backupIntervalHours, time.Now().UTC(), id,
 	)
 	return checkRowsAffected(res, err)
 }
@@ -136,7 +136,7 @@ func scanServerRow(row rowScanner) (*models.Server, error) {
 	var status, varsJSON string
 	var lastBackup sql.NullTime
 
-	if err := row.Scan(&s.ID, &s.OwnerID, &s.NodeID, &s.EggID, &s.Name, &s.ContainerID, &status, &s.MemoryBytes, &s.CPULimit, &varsJSON, &s.PrimaryPort, &s.BackupIntervalHours, &lastBackup, &s.CreatedAt, &s.UpdatedAt); err != nil {
+	if err := row.Scan(&s.ID, &s.OwnerID, &s.NodeID, &s.EggID, &s.Name, &s.ContainerID, &status, &s.MemoryBytes, &s.CPULimit, &s.DiskBytes, &varsJSON, &s.PrimaryPort, &s.BackupIntervalHours, &lastBackup, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return nil, err
 	}
 

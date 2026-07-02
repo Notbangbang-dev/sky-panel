@@ -66,6 +66,7 @@ export interface Server {
   status: ServerStatus;
   memory_bytes: number;
   cpu_limit: number;
+  disk_bytes: number;
   primary_port: number;
   variables: Record<string, string>;
   backup_interval_hours: number;
@@ -76,6 +77,38 @@ export interface BackupEntry {
   filename: string;
   size_bytes: number;
   created_at: number;
+}
+
+export interface QuotaDims {
+  memory_bytes: number;
+  cpu_percent: number;
+  disk_bytes: number;
+}
+
+export interface QuotaUsage extends QuotaDims {
+  servers: number;
+}
+
+export interface QuotaInfo {
+  usage: QuotaUsage;
+  limit: QuotaDims;
+}
+
+export type StoreDimension = "memory" | "cpu" | "disk";
+
+export interface StoreItem {
+  id: string;
+  name: string;
+  description: string;
+  dimension: StoreDimension;
+  amount: number;
+  price: number;
+}
+
+export interface HeartbeatResult {
+  credited: number;
+  balance: number;
+  session_started_at: string;
 }
 
 export interface CoinResult {

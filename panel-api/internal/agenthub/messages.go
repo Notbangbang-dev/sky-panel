@@ -103,15 +103,15 @@ type ContainerSpec struct {
 }
 
 type CommandPayload struct {
-	CommandID      string         `json:"command_id"`
-	Action         string         `json:"action"`
-	ServerID       string         `json:"server_id"`
-	ContainerID    string         `json:"container_id,omitempty"`
-	Spec           *ContainerSpec `json:"spec,omitempty"`
-	Input          string         `json:"input,omitempty"`
-	Path           string         `json:"path,omitempty"`
-	NewPath        string         `json:"new_path,omitempty"`
-	ContentBase64  string         `json:"content_base64,omitempty"`
+	CommandID     string         `json:"command_id"`
+	Action        string         `json:"action"`
+	ServerID      string         `json:"server_id"`
+	ContainerID   string         `json:"container_id,omitempty"`
+	Spec          *ContainerSpec `json:"spec,omitempty"`
+	Input         string         `json:"input,omitempty"`
+	Path          string         `json:"path,omitempty"`
+	NewPath       string         `json:"new_path,omitempty"`
+	ContentBase64 string         `json:"content_base64,omitempty"`
 }
 
 type AckPayload struct {

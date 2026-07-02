@@ -10,6 +10,7 @@ export function SettingsTab({ server }: { server: Server }) {
   const [name, setName] = useState(server.name);
   const [memoryMb, setMemoryMb] = useState(Math.round(server.memory_bytes / 1024 / 1024));
   const [cpuLimit, setCpuLimit] = useState(server.cpu_limit);
+  const [diskMb, setDiskMb] = useState(Math.round(server.disk_bytes / 1024 / 1024));
   const [backupHours, setBackupHours] = useState(server.backup_interval_hours);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -20,10 +21,12 @@ export function SettingsTab({ server }: { server: Server }) {
         name,
         memory_bytes: memoryMb * 1024 * 1024,
         cpu_limit: cpuLimit,
+        disk_bytes: diskMb * 1024 * 1024,
         backup_interval_hours: backupHours,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["servers", server.id] });
+      queryClient.invalidateQueries({ queryKey: ["quota"] });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     },
@@ -69,6 +72,17 @@ export function SettingsTab({ server }: { server: Server }) {
         <p className="sp-mono" style={{ fontSize: 12, color: "var(--sp-text-muted)", marginTop: 6 }}>
           0 = unlimited · 100 = one full core · 200 = two cores
         </p>
+      </div>
+      <div className="sp-field">
+        <label className="sp-label">Disk (MB)</label>
+        <input
+          className="sp-input"
+          type="number"
+          value={diskMb}
+          onChange={(e) => setDiskMb(Number(e.target.value))}
+          min={0}
+          step={1}
+        />
       </div>
       <div className="sp-field">
         <label className="sp-label">Automatic backups every (hours)</label>

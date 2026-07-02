@@ -18,6 +18,7 @@ type createServerRequest struct {
 	Name        string            `json:"name"`
 	MemoryBytes int64             `json:"memory_bytes"`
 	CPULimit    int               `json:"cpu_limit"`
+	DiskBytes   int64             `json:"disk_bytes"`
 	Variables   map[string]string `json:"variables,omitempty"`
 }
 
@@ -30,6 +31,7 @@ type serverResponse struct {
 	Status              string            `json:"status"`
 	MemoryBytes         int64             `json:"memory_bytes"`
 	CPULimit            int               `json:"cpu_limit"`
+	DiskBytes           int64             `json:"disk_bytes"`
 	PrimaryPort         int               `json:"primary_port"`
 	Variables           map[string]string `json:"variables"`
 	BackupIntervalHours int               `json:"backup_interval_hours"`
@@ -39,8 +41,8 @@ type serverResponse struct {
 func toServerResponse(s *models.Server) serverResponse {
 	resp := serverResponse{
 		ID: s.ID, OwnerID: s.OwnerID, NodeID: s.NodeID, EggID: s.EggID, Name: s.Name,
-		Status: string(s.Status), MemoryBytes: s.MemoryBytes, CPULimit: s.CPULimit, PrimaryPort: s.PrimaryPort,
-		Variables: s.Variables, BackupIntervalHours: s.BackupIntervalHours,
+		Status: string(s.Status), MemoryBytes: s.MemoryBytes, CPULimit: s.CPULimit, DiskBytes: s.DiskBytes,
+		PrimaryPort: s.PrimaryPort, Variables: s.Variables, BackupIntervalHours: s.BackupIntervalHours,
 	}
 	if s.LastBackupAt != nil {
 		resp.LastBackupAt = s.LastBackupAt.Format(rfc3339)
@@ -61,7 +63,15 @@ func (d Deps) CreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	server, err := d.ServerSvc.CreateServer(claims.UserID, req.NodeID, req.EggID, req.Name, req.MemoryBytes, req.CPULimit, req.Variables)
+	// Enforce the user's resource quota (admins are unmetered).
+	if claims.Role != string(models.RoleAdmin) {
+		if err := d.QuotaSvc.CheckCreate(claims.UserID, req.MemoryBytes, req.CPULimit, req.DiskBytes); err != nil {
+			d.writeQuotaError(w, err)
+			return
+		}
+	}
+
+	server, err := d.ServerSvc.CreateServer(claims.UserID, req.NodeID, req.EggID, req.Name, req.MemoryBytes, req.CPULimit, req.DiskBytes, req.Variables)
 	if err != nil {
 		if server != nil {
 			// Provisioned but the node failed to actually create/start it;
@@ -256,6 +266,7 @@ type updateServerRequest struct {
 	Name                string            `json:"name"`
 	MemoryBytes         int64             `json:"memory_bytes"`
 	CPULimit            int               `json:"cpu_limit"`
+	DiskBytes           int64             `json:"disk_bytes"`
 	Variables           map[string]string `json:"variables"`
 	BackupIntervalHours int               `json:"backup_interval_hours"`
 }
@@ -273,11 +284,30 @@ func (d Deps) UpdateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "name is required")
 		return
 	}
+	// An omitted numeric field decodes to 0; treat that as "keep current"
+	// rather than wiping the server's allocation (which would also corrupt
+	// quota accounting on the next check).
 	if req.MemoryBytes <= 0 {
 		req.MemoryBytes = server.MemoryBytes
 	}
+	if req.CPULimit <= 0 {
+		req.CPULimit = server.CPULimit
+	}
+	if req.DiskBytes <= 0 {
+		req.DiskBytes = server.DiskBytes
+	}
 
-	updated, err := d.ServerSvc.UpdateServer(server.ID, req.Name, req.MemoryBytes, req.CPULimit, req.Variables, req.BackupIntervalHours)
+	// Enforce quota against the new limits, excluding this server's current
+	// allocation from the total (admins are unmetered).
+	claims, _ := auth.FromContext(r.Context())
+	if claims != nil && claims.Role != string(models.RoleAdmin) {
+		if err := d.QuotaSvc.CheckUpdate(server.OwnerID, server.ID, req.MemoryBytes, req.CPULimit, req.DiskBytes); err != nil {
+			d.writeQuotaError(w, err)
+			return
+		}
+	}
+
+	updated, err := d.ServerSvc.UpdateServer(server.ID, req.Name, req.MemoryBytes, req.CPULimit, req.DiskBytes, req.Variables, req.BackupIntervalHours)
 	if err != nil {
 		if updated != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]any{

@@ -2,6 +2,21 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0] - 2026-07-01
+
+### ✨ New Features
+
+- **Resource quotas** — every user now has a quota capping the total RAM, CPU, and disk they can allocate across all their servers. Creating or resizing a server is checked against it (admins are unmetered), and a new usage meter on the create form, the servers list, and the store shows exactly how much of each you've used. Defaults are 2 GB RAM / 2 cores / 10 GB disk and are admin-configurable.
+- **Per-server disk allocation** — servers now carry a disk allocation (settable on create and in the Settings tab) that counts against your disk quota. (Declared allocation for accounting; on-node enforcement via usage monitoring is planned.)
+- **Coin store** — spend the coins you earn on permanent quota upgrades: +512 MB / +1 GB RAM, +50% / +100% CPU, +5 GB / +10 GB disk. Buying one debits your balance (atomically, never below zero) and raises the matching limit immediately.
+- **A real AFK page** — the AFK screen is now a proper idle session: a live balance orb with a next-credit progress ring, a session timer, coins earned this session, and your earn rate — plus the daily reward claim.
+- **AFK anti-abuse** — only one AFK session earns at a time. Opening the AFK page in a second tab shows "already running in another tab" and earns nothing until the first session goes idle, so you can't multiply coins by stacking tabs.
+- **Admin quota control** — the admin user table gained a per-user quota editor to grant bonus RAM/CPU/disk on top of the defaults.
+
+### 🔗 Requires
+
+- No node update needed — this release is panel-only and works with sky-daemon v0.2.0.
+
 ## [0.5.0] - 2026-07-01
 
 ### ✨ New Features

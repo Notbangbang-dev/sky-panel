@@ -13,6 +13,7 @@ const PRIMARY_NAV: NavItem[] = [
   { label: "Servers", to: "/servers", glyph: "▣" },
   { label: "Nodes", to: "/nodes", glyph: "⬢" },
   { label: "Wallet", to: "/wallet", glyph: "◈" },
+  { label: "Store", to: "/store", glyph: "⧉" },
   { label: "AFK", to: "/afk", glyph: "◐" },
   { label: "Account", to: "/account", glyph: "◎" },
 ];
