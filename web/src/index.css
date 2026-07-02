@@ -1263,3 +1263,123 @@ a.sp-card:hover {
   position: relative;
   z-index: 1;
 }
+
+/* ---------- Server detail: connection chip, gauges, console frame ---------- */
+
+/* Copyable connect address (ip:port) shown next to the server header. */
+.sp-conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sp-font-mono);
+  font-size: 13px;
+  border: 1px solid var(--sp-surface-border);
+  border-radius: 8px;
+  padding: 5px 6px 5px 12px;
+  background: var(--sp-elevate);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.sp-conn:hover {
+  border-color: color-mix(in srgb, var(--sp-accent) 40%, var(--sp-surface-border));
+}
+.sp-conn__label {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sp-text-muted);
+}
+.sp-conn__addr {
+  color: var(--sp-text);
+  font-variant-numeric: tabular-nums;
+}
+.sp-conn__copy {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sp-text-muted);
+  border: 1px solid var(--sp-surface-border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  background: transparent;
+}
+
+/* Thin gauge used inside the CPU/Memory stat cards. */
+.sp-gauge {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sp-text) 12%, transparent);
+  overflow: hidden;
+  margin-top: 10px;
+}
+.sp-gauge__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--sp-accent);
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sp-gauge__fill--warn {
+  background: #ff9b9b;
+}
+
+/* Power / lifecycle control cluster in the server header. */
+.sp-ctl-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+}
+.sp-ctl-sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--sp-surface-border);
+  margin: 2px 4px;
+}
+
+/* Framed console with a status toolbar. */
+.sp-console-frame {
+  border: 1px solid var(--sp-surface-border);
+  border-radius: var(--sp-radius);
+  overflow: hidden;
+  background: #05060a;
+  box-shadow: var(--sp-panel-shadow);
+}
+.sp-console-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--sp-surface-border);
+  background: var(--sp-elevate);
+}
+.sp-console-bar__title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--sp-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sp-text-muted);
+}
+.sp-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sp-text-muted);
+}
+.sp-dot--live {
+  background: var(--sp-accent);
+  box-shadow: 0 0 8px var(--sp-accent);
+  animation: sp-pulse 2s ease-in-out infinite;
+}
+@keyframes sp-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}

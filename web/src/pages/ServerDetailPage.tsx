@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { adminApi, serversApi } from "../lib/endpoints";
+import { adminApi, nodesApi, serversApi } from "../lib/endpoints";
 import { useTopic } from "../lib/useTopic";
 import { useAuthStore } from "../lib/authStore";
 import { Console } from "../components/Console";
@@ -34,13 +34,14 @@ export function ServerDetailPage() {
     queryKey: ["servers", id],
     queryFn: () => serversApi.get(id!),
     enabled: !!id,
-    // While provisioning (async — may pull an image), poll so the page moves
-    // off "installing" to running/errored on its own instead of looking stuck.
     refetchInterval: (query) => {
       const s = query.state.data?.status;
       return s === "installing" || s === "stopping" ? 3000 : false;
     },
   });
+
+  // The connect address is the owning node's address + the server's port.
+  const { data: nodes } = useQuery({ queryKey: ["nodes"], queryFn: nodesApi.list });
 
   const isAdmin = user?.role === "admin";
   const canManage = !!server && !!user && (server.owner_id === user.id || isAdmin);
@@ -50,6 +51,7 @@ export function ServerDetailPage() {
 
   const [lines, setLines] = useState<string[]>([]);
   const [stats, setStats] = useState<ContainerHeartbeat | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useTopic<ConsoleLine>(id ? `server:${id}:console` : null, (msg) => {
     setLines((prev) => [...prev, msg.message]);
@@ -58,6 +60,14 @@ export function ServerDetailPage() {
 
   const power = useMutation({
     mutationFn: (action: "start" | "stop" | "kill") => serversApi.power(id!, action),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["servers", id] }),
+  });
+
+  const restart = useMutation({
+    mutationFn: async () => {
+      await serversApi.power(id!, "stop").catch(() => {});
+      await serversApi.power(id!, "start");
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["servers", id] }),
   });
 
@@ -76,7 +86,25 @@ export function ServerDetailPage() {
   if (!server) return <p className="sp-mono">loading…</p>;
 
   const installing = server.status === "installing";
+  const stopping = server.status === "stopping";
   const errored = server.status === "errored";
+  const running = server.status === "running";
+  const busy = installing || stopping;
+
+  const node = nodes?.find((n) => n.id === server.node_id);
+  const address = node?.address ? `${node.address}:${server.primary_port}` : `:${server.primary_port}`;
+
+  const copyAddress = () => {
+    navigator.clipboard?.writeText(address).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => setCopied(false),
+    );
+  };
+
+  const startBlocked = running || busy || (server.suspended && !isAdmin);
 
   return (
     <div>
@@ -94,11 +122,13 @@ export function ServerDetailPage() {
               </span>
             )}
           </div>
-          <div className="sp-spec-strip">
-            <span className="sp-spec">
-              <span className="sp-spec__k">port</span>
-              {server.primary_port}
-            </span>
+
+          <div className="sp-spec-strip" style={{ alignItems: "center" }}>
+            <button className="sp-conn" onClick={copyAddress} title="Copy connect address">
+              <span className="sp-conn__label">connect</span>
+              <span className="sp-conn__addr">{address}</span>
+              <span className="sp-conn__copy">{copied ? "copied" : "copy"}</span>
+            </button>
             <span className="sp-spec">
               <span className="sp-spec__k">ram</span>
               {formatBytes(server.memory_bytes)}
@@ -111,23 +141,40 @@ export function ServerDetailPage() {
               <span className="sp-spec__k">disk</span>
               {server.disk_bytes ? formatBytes(server.disk_bytes) : "—"}
             </span>
+            {node && (
+              <span className="sp-spec">
+                <span className="sp-spec__k">node</span>
+                {node.name}
+              </span>
+            )}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+
+        <div className="sp-ctl-bar">
           <button
-            className="sp-btn"
+            className="sp-btn sp-btn--primary"
             onClick={() => power.mutate("start")}
-            disabled={(server.suspended && !isAdmin) || installing}
+            disabled={startBlocked || power.isPending}
             title={server.suspended && !isAdmin ? "This server is suspended by an administrator" : undefined}
           >
-            Start
+            ▶ Start
           </button>
-          <button className="sp-btn" onClick={() => power.mutate("stop")}>
-            Stop
+          <button
+            className="sp-btn"
+            onClick={() => restart.mutate()}
+            disabled={!running || restart.isPending}
+          >
+            ↻ Restart
           </button>
-          <button className="sp-btn sp-btn--danger" onClick={() => power.mutate("kill")}>
-            Kill
+          <button className="sp-btn" onClick={() => power.mutate("stop")} disabled={!running}>
+            ■ Stop
           </button>
+          <button className="sp-btn sp-btn--danger" onClick={() => power.mutate("kill")} disabled={!running}>
+            ✕ Kill
+          </button>
+
+          <span className="sp-ctl-sep" />
+
           {isAdmin && (
             <button
               className="sp-btn sp-btn--danger"
@@ -139,15 +186,22 @@ export function ServerDetailPage() {
           )}
           {canManage && (
             <button
-              className="sp-btn sp-btn--danger"
+              className="sp-btn"
               onClick={() => navigate(`/servers/${id}/reinstall`)}
               disabled={installing}
             >
-              {installing ? "Installing…" : "Reinstall"}
+              {installing ? "Installing…" : "⟳ Reinstall"}
             </button>
           )}
-          <button className="sp-btn sp-btn--danger" onClick={() => remove.mutate()}>
-            Delete
+          <button
+            className="sp-btn sp-btn--danger"
+            onClick={() => {
+              if (window.confirm(`Delete “${server.name}”? This removes the container and frees its port. Files are lost.`)) {
+                remove.mutate();
+              }
+            }}
+          >
+            🗑 Delete
           </button>
         </div>
       </div>
@@ -186,13 +240,22 @@ export function ServerDetailPage() {
       )}
 
       <div className="sp-grid sp-grid--cards" style={{ marginBottom: 16 }}>
-        <StatCard label="CPU" value={stats ? `${stats.cpu_percent.toFixed(1)}%` : "—"} />
-        <StatCard label="Memory" value={stats ? `${(stats.mem_used_bytes / 1024 / 1024).toFixed(0)}MB` : "—"} />
+        <StatCard
+          label="CPU"
+          value={stats ? `${stats.cpu_percent.toFixed(1)}%` : "—"}
+          pct={stats && server.cpu_limit > 0 ? (stats.cpu_percent / server.cpu_limit) * 100 : stats?.cpu_percent}
+        />
+        <StatCard
+          label="Memory"
+          value={stats ? `${(stats.mem_used_bytes / 1024 / 1024).toFixed(0)}MB` : "—"}
+          sub={stats ? `of ${formatBytes(stats.mem_limit_bytes || server.memory_bytes)}` : undefined}
+          pct={stats && stats.mem_limit_bytes > 0 ? (stats.mem_used_bytes / stats.mem_limit_bytes) * 100 : undefined}
+        />
         <StatCard label="Net RX" value={stats ? `${(stats.net_rx_bytes / 1024).toFixed(1)}KB` : "—"} />
         <StatCard label="Net TX" value={stats ? `${(stats.net_tx_bytes / 1024).toFixed(1)}KB` : "—"} />
       </div>
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
         {visibleTabs.map((t) => (
           <button
             key={t}
@@ -206,8 +269,19 @@ export function ServerDetailPage() {
       </div>
 
       {tab === "Console" && (
-        <div className="sp-surface" style={{ height: 420, padding: 12 }}>
-          <Console lines={lines} onInput={sendInput} />
+        <div className="sp-console-frame">
+          <div className="sp-console-bar">
+            <span className="sp-console-bar__title">
+              <span className={"sp-dot" + (running ? " sp-dot--live" : "")} />
+              Console {running ? "· live" : `· ${server.status}`}
+            </span>
+            <button className="sp-btn sp-btn--sm" onClick={() => setLines([])}>
+              Clear
+            </button>
+          </div>
+          <div style={{ height: 420, padding: 12 }}>
+            <Console lines={lines} onInput={sendInput} />
+          </div>
         </div>
       )}
       {tab === "Files" && <FilesTab serverId={id!} />}
@@ -220,13 +294,24 @@ export function ServerDetailPage() {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
+function StatCard({ label, value, sub, pct }: { label: string; value: string; sub?: string; pct?: number }) {
+  const clamped = pct === undefined ? undefined : Math.max(0, Math.min(100, pct));
   return (
     <div className="sp-surface sp-card">
       <p className="sp-stat__label">{label}</p>
-      <p className="sp-mono" style={{ fontSize: 26, fontVariantNumeric: "tabular-nums" }}>
+      <p className="sp-mono" style={{ fontSize: 26, fontVariantNumeric: "tabular-nums", margin: 0 }}>
         {value}
       </p>
+      {sub && (
+        <p className="sp-mono" style={{ fontSize: 11, color: "var(--sp-text-muted)", margin: "2px 0 0" }}>
+          {sub}
+        </p>
+      )}
+      {clamped !== undefined && (
+        <div className="sp-gauge">
+          <div className={"sp-gauge__fill" + (clamped >= 90 ? " sp-gauge__fill--warn" : "")} style={{ width: `${clamped}%` }} />
+        </div>
+      )}
     </div>
   );
 }

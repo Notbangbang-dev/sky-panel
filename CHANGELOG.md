@@ -2,6 +2,16 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.2] - 2026-07-02
+
+### 🎨 Improvements
+
+- **Reworked server page.** The header now shows a one-click **copyable connect address** (`ip:port`) right next to the server, plus the node it's on. Power controls are a cleaner, state-aware cluster — **Start / Restart / Stop / Kill** enable and disable based on whether the server is actually running, with a new **Restart** button and a confirm on **Delete**. The CPU and Memory stat cards now show live **usage gauges** against their limits, and the **console** sits in a proper framed panel with a live/offline indicator and a **Clear** button.
+
+### 🔗 Requires
+
+- Panel-only for the UI. To fix game images failing at boot with `operation not permitted`, update your nodes to **sky-daemon v0.4.3** and reinstall.
+
 ## [0.15.1] - 2026-07-02
 
 ### 🛠 Fixes
