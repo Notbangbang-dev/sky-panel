@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { eggsApi, nodesApi, serversApi } from "../lib/endpoints";
+import { eggsApi, nodesApi, quotaApi, serversApi } from "../lib/endpoints";
 import { StatusBadge } from "../components/StatusBadge";
 import { QuotaMeters } from "../components/QuotaMeters";
 import { bytesPerMB } from "../lib/format";
@@ -12,6 +12,8 @@ export function ServersListPage() {
   const { data: servers } = useQuery({ queryKey: ["servers"], queryFn: serversApi.list });
   const { data: eggs } = useQuery({ queryKey: ["eggs"], queryFn: eggsApi.list });
   const { data: nodes } = useQuery({ queryKey: ["nodes"], queryFn: nodesApi.list });
+  const { data: quota } = useQuery({ queryKey: ["quota"], queryFn: quotaApi.mine });
+  const allowUnlimitedCpu = quota?.allow_unlimited_cpu ?? true;
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
@@ -130,11 +132,13 @@ export function ServersListPage() {
               type="number"
               value={cpuLimit}
               onChange={(e) => setCpuLimit(Number(e.target.value))}
-              min={0}
+              min={allowUnlimitedCpu ? 0 : 1}
               step={1}
             />
             <p className="sp-mono" style={{ fontSize: 12, color: "var(--sp-text-muted)", marginTop: 6 }}>
-              0 = unlimited · 100 = one full core · 200 = two cores
+              {allowUnlimitedCpu
+                ? "0 = unlimited · 100 = one full core · 200 = two cores"
+                : "100 = one full core · 200 = two cores — a CPU limit is required"}
             </p>
           </div>
           <div className="sp-field">

@@ -5,8 +5,10 @@
 package quotasvc
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/repo"
 )
@@ -18,10 +20,15 @@ const (
 	DefaultCPUPercent  int   = 200                 // two cores
 	DefaultDiskBytes   int64 = 10240 * 1024 * 1024 // 10 GB
 
-	SettingMemoryBytes = "quota.default_memory_bytes"
-	SettingCPUPercent  = "quota.default_cpu_percent"
-	SettingDiskBytes   = "quota.default_disk_bytes"
+	SettingMemoryBytes       = "quota.default_memory_bytes"
+	SettingCPUPercent        = "quota.default_cpu_percent"
+	SettingDiskBytes         = "quota.default_disk_bytes"
+	SettingAllowUnlimitedCPU = "quota.allow_unlimited_cpu"
 )
+
+// ErrUnlimitedCPU is returned when a non-admin requests unlimited CPU
+// (cpu_limit 0) but an admin has disabled that, so CPU must stay quota-bound.
+var ErrUnlimitedCPU = errors.New("unlimited CPU is disabled; set a CPU limit within your quota")
 
 // Quota is a set of resource limits.
 type Quota struct {
@@ -112,7 +119,20 @@ func (s *Service) CheckUpdate(userID, serverID string, memoryBytes int64, cpuPer
 	return s.check(userID, serverID, memoryBytes, cpuPercent, diskBytes)
 }
 
+// AllowUnlimitedCPU reports whether a server may be created with cpu_limit 0
+// (unlimited on the node). Admins can turn this off so CPU is always bounded
+// by the user's quota like memory and disk.
+func (s *Service) AllowUnlimitedCPU() bool {
+	return s.settingBool(SettingAllowUnlimitedCPU, true)
+}
+
 func (s *Service) check(userID, excludeServerID string, memoryBytes int64, cpuPercent int, diskBytes int64) error {
+	// cpu_limit 0 means "unlimited" on the node, which would sidestep the CPU
+	// quota entirely — refuse it when an admin has disabled unlimited CPU.
+	if cpuPercent <= 0 && !s.AllowUnlimitedCPU() {
+		return ErrUnlimitedCPU
+	}
+
 	limit, err := s.Effective(userID)
 	if err != nil {
 		return err
@@ -143,4 +163,12 @@ func (s *Service) settingInt64(key string, fallback int64) int64 {
 		return fallback
 	}
 	return n
+}
+
+func (s *Service) settingBool(key string, fallback bool) bool {
+	v, found, err := s.Settings.Get(key)
+	if err != nil || !found {
+		return fallback
+	}
+	return strings.EqualFold(strings.TrimSpace(v), "true")
 }

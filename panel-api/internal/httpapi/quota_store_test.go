@@ -50,6 +50,40 @@ func TestMyQuotaReportsUsageAndLimit(t *testing.T) {
 	}
 }
 
+func TestDisablingUnlimitedCPUBlocksZeroCPU(t *testing.T) {
+	router, _, adminAccess, ownerAccess, _ := setupServerWithFakeAgent(t)
+
+	// By default unlimited CPU is allowed, so cpu_limit 0 passes the quota
+	// check (it fails later at dispatch, but not with a quota error).
+	rec := authedJSON(t, router, http.MethodPost, "/api/v1/servers", ownerAccess, createServerRequest{
+		NodeID: "n", EggID: "e", Name: "Unlimited", MemoryBytes: 256 * 1024 * 1024, CPULimit: 0,
+	})
+	if rec.Code == http.StatusConflict {
+		t.Fatalf("did not expect a quota conflict while unlimited CPU is allowed, got %s", rec.Body.String())
+	}
+
+	// Admin turns off unlimited CPU.
+	set := authedJSON(t, router, http.MethodPut, "/api/v1/admin/settings/quota.allow_unlimited_cpu", adminAccess, map[string]string{"value": "false"})
+	if set.Code != http.StatusNoContent {
+		t.Fatalf("set setting: expected 204, got %d: %s", set.Code, set.Body.String())
+	}
+
+	// Now a non-admin can't create a 0-CPU (unlimited) server.
+	rec = authedJSON(t, router, http.MethodPost, "/api/v1/servers", ownerAccess, createServerRequest{
+		NodeID: "n", EggID: "e", Name: "Still Unlimited", MemoryBytes: 256 * 1024 * 1024, CPULimit: 0,
+	})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409 when unlimited CPU is disabled, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// /me/quota advertises the flag so the UI can require a CPU value.
+	var q quotaResponse
+	decodeBody(t, authedRequest(t, router, http.MethodGet, "/api/v1/me/quota", ownerAccess), &q)
+	if q.AllowUnlimitedCPU {
+		t.Error("expected allow_unlimited_cpu=false in /me/quota after disabling it")
+	}
+}
+
 func TestStorePurchaseRequiresCoinsThenRaisesQuota(t *testing.T) {
 	router, _ := newFullTestRouter(t)
 

@@ -18,12 +18,17 @@ func (d Deps) writeQuotaError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "quota_exceeded", qe.Error())
 		return
 	}
+	if errors.Is(err, quotasvc.ErrUnlimitedCPU) {
+		writeError(w, http.StatusConflict, "cpu_required", quotasvc.ErrUnlimitedCPU.Error())
+		return
+	}
 	writeError(w, http.StatusInternalServerError, "internal_error", "failed to check quota")
 }
 
 type quotaResponse struct {
-	Usage quotasvc.Usage `json:"usage"`
-	Limit quotasvc.Quota `json:"limit"`
+	Usage             quotasvc.Usage `json:"usage"`
+	Limit             quotasvc.Quota `json:"limit"`
+	AllowUnlimitedCPU bool           `json:"allow_unlimited_cpu"`
 }
 
 // MyQuota reports the caller's current usage and effective limits, for the
@@ -48,7 +53,7 @@ func (d Deps) writeQuotaFor(w http.ResponseWriter, userID string) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load quota")
 		return
 	}
-	writeJSON(w, http.StatusOK, quotaResponse{Usage: usage, Limit: limit})
+	writeJSON(w, http.StatusOK, quotaResponse{Usage: usage, Limit: limit, AllowUnlimitedCPU: d.QuotaSvc.AllowUnlimitedCPU()})
 }
 
 // ListStore returns the store catalog.

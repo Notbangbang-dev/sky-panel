@@ -100,6 +100,7 @@ export interface QuotaUsage extends QuotaDims {
 export interface QuotaInfo {
   usage: QuotaUsage;
   limit: QuotaDims;
+  allow_unlimited_cpu: boolean;
 }
 
 export interface AdminQuotaInfo extends QuotaInfo {

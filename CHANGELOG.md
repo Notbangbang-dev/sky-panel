@@ -2,6 +2,17 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.0] - 2026-07-02
+
+### ✨ New Features
+
+- **Admin → Quotas tab** — one place to control resource limits: the global **default** memory, CPU, and disk every user starts with, plus a **"Disable unlimited CPU"** switch.
+- **Turn off unlimited CPU** — with it off, a server can no longer be created or resized with a CPU limit of `0` (which meant "unlimited" and quietly sidestepped the CPU quota). Every server must now reserve CPU from the user's quota, just like memory and disk — so all three are genuinely capped. Admins remain unmetered. The create form requires a CPU value and `/me/quota` reports the setting so the UI adapts.
+
+### 🔗 Requires
+
+- Panel-only release — works with sky-daemon v0.2.0.
+
 ## [0.9.0] - 2026-07-01
 
 ### 🛠 Fixes
