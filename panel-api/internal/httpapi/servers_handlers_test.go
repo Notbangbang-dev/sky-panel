@@ -93,7 +93,7 @@ func connectFakeNodeAgent(t *testing.T, srv *httptest.Server, nodeToken string) 
 		t.Fatalf("dial agent ws: %v", err)
 	}
 
-	env, err := agenthub.EncodeSigned([]byte(nodeToken), agenthub.TypeHello, agenthub.HelloPayload{NodeToken: nodeToken, AgentVersion: "test"})
+	env, err := agenthub.EncodeSigned([]byte(nodeToken), agenthub.TypeHello, agenthub.HelloPayload{NodeToken: nodeToken, AgentVersion: "test", Capabilities: []string{agenthub.CapPullImage}})
 	if err != nil {
 		t.Fatalf("encode hello: %v", err)
 	}

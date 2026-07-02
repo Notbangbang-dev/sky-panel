@@ -17,6 +17,7 @@ import (
 type fakeSender struct {
 	commands []agenthub.CommandPayload
 	failOn   string // Action to fail, if any
+	noPull   bool   // simulate a legacy node without pull_image support
 }
 
 func (f *fakeSender) SendCommand(nodeID string, cmd agenthub.CommandPayload) (agenthub.AckPayload, error) {
@@ -30,6 +31,10 @@ func (f *fakeSender) SendCommand(nodeID string, cmd agenthub.CommandPayload) (ag
 func (f *fakeSender) SendCommandTimeout(nodeID string, cmd agenthub.CommandPayload, _ time.Duration) (agenthub.AckPayload, error) {
 	return f.SendCommand(nodeID, cmd)
 }
+
+func (f *fakeSender) ConnectedNodeIDs() []string { return nil }
+
+func (f *fakeSender) SupportsPullImage(string) bool { return !f.noPull }
 
 func newTestService(t *testing.T, sender CommandSender) (*Service, *repo.Nodes, *repo.Eggs, *repo.Servers, *repo.Users) {
 	t.Helper()
@@ -128,14 +133,19 @@ func TestCreateServerHappyPath(t *testing.T) {
 		t.Fatalf("Provision: %v", err)
 	}
 
-	if len(sender.commands) != 2 {
-		t.Fatalf("expected 2 dispatched commands (create, start), got %d", len(sender.commands))
+	if len(sender.commands) != 3 {
+		t.Fatalf("expected 3 dispatched commands (pull_image, create, start), got %d", len(sender.commands))
 	}
-	if sender.commands[0].Action != agenthub.ActionCreate || sender.commands[1].Action != agenthub.ActionStart {
+	if sender.commands[0].Action != agenthub.ActionPullImage ||
+		sender.commands[1].Action != agenthub.ActionCreate ||
+		sender.commands[2].Action != agenthub.ActionStart {
 		t.Errorf("unexpected command sequence: %+v", sender.commands)
 	}
+	if sender.commands[0].Image != egg.DockerImage {
+		t.Errorf("expected pull_image to carry the egg image %q, got %q", egg.DockerImage, sender.commands[0].Image)
+	}
 
-	spec := sender.commands[0].Spec
+	spec := sender.commands[1].Spec
 	if spec == nil {
 		t.Fatal("expected a container spec on the create command")
 	}
@@ -155,6 +165,44 @@ func TestCreateServerHappyPath(t *testing.T) {
 	}
 	if persisted.Status != models.StatusRunning {
 		t.Errorf("expected persisted status running, got %q", persisted.Status)
+	}
+}
+
+func TestProvisionLegacyNodeSkipsPullImage(t *testing.T) {
+	// A node whose daemon predates pull_image must never be sent that command
+	// (an old daemon can't decode it and drops the connection). Provisioning
+	// falls back to create + start only.
+	sender := &fakeSender{noPull: true}
+	svc, nodes, eggs, servers, users := newTestService(t, sender)
+
+	node := seedNode(t, nodes)
+	egg := seedEgg(t, eggs)
+	owner := seedUser(t, users)
+	if err := svc.Allocations.Create(uuid.NewString(), node.ID, 25565); err != nil {
+		t.Fatalf("seed allocation: %v", err)
+	}
+
+	server, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "Legacy", 1024, 0, 0, nil)
+	if err != nil {
+		t.Fatalf("CreateServer: %v", err)
+	}
+	if err := svc.Provision(server.ID, defaultProvisionTimeout); err != nil {
+		t.Fatalf("Provision: %v", err)
+	}
+
+	for _, cmd := range sender.commands {
+		if cmd.Action == agenthub.ActionPullImage {
+			t.Fatalf("legacy node must not receive pull_image, got commands %+v", sender.commands)
+		}
+	}
+	if len(sender.commands) != 2 ||
+		sender.commands[0].Action != agenthub.ActionCreate ||
+		sender.commands[1].Action != agenthub.ActionStart {
+		t.Errorf("expected legacy sequence [create, start], got %+v", sender.commands)
+	}
+
+	if persisted, _ := servers.GetByID(server.ID); persisted.Status != models.StatusRunning {
+		t.Errorf("expected running, got %q", persisted.Status)
 	}
 }
 

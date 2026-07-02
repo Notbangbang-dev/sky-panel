@@ -79,6 +79,14 @@ func (r *Servers) SetEgg(id, eggID string) error {
 	return checkRowsAffected(res, err)
 }
 
+// SetStatusMessage updates only the human-readable status message, leaving the
+// status itself unchanged — used to surface live provisioning phases (e.g.
+// "Pulling image…", "Creating container…") while a server is still installing.
+func (r *Servers) SetStatusMessage(id, message string) error {
+	res, err := r.db.Exec(`UPDATE servers SET status_message = ?, updated_at = ? WHERE id = ?`, message, time.Now().UTC(), id)
+	return checkRowsAffected(res, err)
+}
+
 // SetError marks a server errored and records why, so the UI can explain it.
 func (r *Servers) SetError(id, message string) error {
 	res, err := r.db.Exec(

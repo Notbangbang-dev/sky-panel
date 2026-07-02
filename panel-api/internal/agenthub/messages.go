@@ -33,9 +33,15 @@ const (
 )
 
 type HelloPayload struct {
-	NodeToken    string `json:"node_token"`
-	AgentVersion string `json:"agent_version"`
+	NodeToken    string   `json:"node_token"`
+	AgentVersion string   `json:"agent_version"`
+	Capabilities []string `json:"capabilities,omitempty"`
 }
+
+// CapPullImage is the capability token a daemon advertises in its hello when it
+// understands the pull_image command (daemon v0.4.0+). The panel only sends
+// pull_image to nodes that advertise it, so older daemons keep working.
+const CapPullImage = "pull_image"
 
 type ContainerHeartbeat struct {
 	ServerID string  `json:"server_id"`
@@ -70,6 +76,7 @@ const (
 	ActionStop       = "stop"
 	ActionKill       = "kill"
 	ActionRemove     = "remove"
+	ActionPullImage  = "pull_image"
 	ActionConsole    = "console_input"
 	ActionListFiles  = "list_files"
 	ActionReadFile   = "read_file"
@@ -108,6 +115,7 @@ type CommandPayload struct {
 	ServerID      string         `json:"server_id"`
 	ContainerID   string         `json:"container_id,omitempty"`
 	Spec          *ContainerSpec `json:"spec,omitempty"`
+	Image         string         `json:"image,omitempty"`
 	Input         string         `json:"input,omitempty"`
 	Path          string         `json:"path,omitempty"`
 	NewPath       string         `json:"new_path,omitempty"`

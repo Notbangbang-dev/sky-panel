@@ -51,6 +51,10 @@ func (d Deps) CreateEgg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.audit(r, "egg.create", egg.ID, egg.Name)
+	// Warm the new image across connected nodes so the first server on it is fast.
+	if d.ServerSvc != nil {
+		d.ServerSvc.WarmImage(egg.DockerImage)
+	}
 
 	writeJSON(w, http.StatusCreated, toEggResponse(egg))
 }
@@ -109,6 +113,10 @@ func (d Deps) UpdateEgg(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.audit(r, "egg.update", existing.ID, existing.Name)
+	// The image may have changed — warm it on connected nodes.
+	if d.ServerSvc != nil {
+		d.ServerSvc.WarmImage(existing.DockerImage)
+	}
 
 	writeJSON(w, http.StatusOK, toEggResponse(existing))
 }

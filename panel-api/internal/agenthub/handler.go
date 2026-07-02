@@ -56,6 +56,10 @@ type Handler struct {
 	Registry *Registry
 	Nodes    NodeLookup
 	Sink     EventSink
+	// OnNodeConnected, if set, is invoked (in its own goroutine) each time a
+	// node finishes its hello handshake — used to warm the node's image cache.
+	// Optional so the handler stays testable without pulling in serversvc.
+	OnNodeConnected func(nodeID string)
 }
 
 func NewHandler(registry *Registry, nodes NodeLookup, sink EventSink) *Handler {
@@ -74,44 +78,49 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	nodeID, secret, err := h.awaitHello(ws)
+	nodeID, secret, caps, err := h.awaitHello(ws)
 	if err != nil {
 		log.Printf("agenthub: rejecting connection: %v", err)
 		return
 	}
 
-	conn := newConn(nodeID, ws, secret)
+	conn := newConn(nodeID, ws, secret, caps)
 	h.Registry.register(nodeID, conn)
 	defer h.Registry.unregister(nodeID, conn)
 
 	log.Printf("agenthub: node %s connected", nodeID)
+	if h.OnNodeConnected != nil {
+		go h.OnNodeConnected(nodeID)
+	}
 	h.readLoop(conn, ws, secret)
+	// The socket is dead; unblock anything still awaiting an ack on it.
+	conn.failPending()
 	log.Printf("agenthub: node %s disconnected", nodeID)
 }
 
-func (h *Handler) awaitHello(ws *websocket.Conn) (nodeID string, secret []byte, err error) {
+func (h *Handler) awaitHello(ws *websocket.Conn) (nodeID string, secret []byte, capabilities []string, err error) {
 	var env Envelope
 	if err := ws.ReadJSON(&env); err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	if env.Type != TypeHello {
-		return "", nil, errUnexpectedFirstMessage
+		return "", nil, nil, errUnexpectedFirstMessage
 	}
 
 	var hello HelloPayload
 	if err := json.Unmarshal(env.Payload, &hello); err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	id, token, expiresAt, err := h.Nodes.AuthenticateNode(auth.HashToken(hello.NodeToken))
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	if time.Now().After(expiresAt) {
-		return "", nil, errNodeTokenExpired
+		return "", nil, nil, errNodeTokenExpired
 	}
 
-	return id, []byte(token), nil
+	return id, []byte(token), hello.Capabilities, nil
 }
 
 func (h *Handler) readLoop(conn *Conn, ws *websocket.Conn, secret []byte) {

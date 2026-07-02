@@ -65,7 +65,16 @@ export function ReinstallPage() {
   const switching = !!server && eggId !== "" && eggId !== server.egg_id;
 
   const status = server?.status;
-  const phase = status === "installing" ? Math.min(PHASES.length - 1, Math.floor((now - startRef.current) / 6000)) : -1;
+  // Prefer the live phase the node reports (status_message) over a pure timer,
+  // so the checklist tracks what's actually happening. Falls back to the timer
+  // estimate before the first phase message lands.
+  const messagePhase = status === "installing" ? phaseFromMessage(server?.status_message) : -1;
+  const phase =
+    status === "installing"
+      ? messagePhase >= 0
+        ? messagePhase
+        : Math.min(PHASES.length - 1, Math.floor((now - startRef.current) / 6000))
+      : -1;
   const elapsed = started ? Math.max(0, Math.floor((now - startRef.current) / 1000)) : 0;
 
   // Which view: confirm (not started) → progress (installing) → done.
@@ -141,9 +150,14 @@ export function ReinstallPage() {
                 </div>
               ))}
             </div>
+            {server.status_message && (
+              <p className="sp-mono" style={{ fontSize: 12, color: "var(--sp-signal, var(--sp-accent))" }}>
+                {server.status_message}
+              </p>
+            )}
             <p className="sp-reinstall__lede sp-mono" style={{ fontSize: 13 }}>
-              Elapsed {formatElapsed(elapsed)} · first launch pulls the image and can take a few minutes. You can leave —
-              it keeps going.
+              Elapsed {formatElapsed(elapsed)} · a cold node pulls the image the first time; after that it's cached and
+              this is quick. You can leave — it keeps going.
             </p>
           </>
         )}
@@ -185,6 +199,16 @@ function formatElapsed(s: number): string {
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+// Map the node's live status message to an index in PHASES so the checklist
+// highlights the real step. Returns -1 when there's no message yet.
+function phaseFromMessage(msg?: string): number {
+  if (!msg) return -1;
+  if (/pulling/i.test(msg)) return 1;
+  if (/creating/i.test(msg)) return 2;
+  if (/starting/i.test(msg)) return 3;
+  return 0;
 }
 
 function Reactor({ state, label }: { state: "idle" | "run" | "ok" | "error"; label: string }) {

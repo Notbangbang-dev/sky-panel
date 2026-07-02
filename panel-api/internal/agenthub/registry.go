@@ -20,12 +20,22 @@ type Conn struct {
 	secret  []byte
 	writeMu sync.Mutex
 
+	// supportsPull is true when the node advertised the pull_image capability
+	// in its hello, so the panel can safely send it that command.
+	supportsPull bool
+
 	pendingMu sync.Mutex
 	pending   map[string]chan AckPayload
 }
 
-func newConn(nodeID string, ws *websocket.Conn, secret []byte) *Conn {
-	return &Conn{NodeID: nodeID, conn: ws, secret: secret, pending: make(map[string]chan AckPayload)}
+func newConn(nodeID string, ws *websocket.Conn, secret []byte, capabilities []string) *Conn {
+	c := &Conn{NodeID: nodeID, conn: ws, secret: secret, pending: make(map[string]chan AckPayload)}
+	for _, cap := range capabilities {
+		if cap == CapPullImage {
+			c.supportsPull = true
+		}
+	}
+	return c
 }
 
 // SendCommand writes cmd to the node and blocks until the matching ack
@@ -70,12 +80,34 @@ func (c *Conn) resolveAck(ack AckPayload) {
 	ch, ok := c.pending[ack.CommandID]
 	c.pendingMu.Unlock()
 	if ok {
-		ch <- ack
+		// Non-blocking: the channel is buffered(1) and read at most once, so a
+		// duplicate ack (or one racing failPending) must never wedge the read
+		// loop on a full buffer.
+		select {
+		case ch <- ack:
+		default:
+		}
 	}
 }
 
 func (c *Conn) Close() error {
 	return c.conn.Close()
+}
+
+// failPending resolves every in-flight command with a failure ack. Called when
+// the connection drops so a waiting SendCommand returns immediately instead of
+// blocking until its (possibly long) context deadline — e.g. if a node dies
+// mid image-pull.
+func (c *Conn) failPending() {
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+	for id, ch := range c.pending {
+		select {
+		case ch <- AckPayload{CommandID: id, OK: false, Error: "node disconnected"}:
+		default:
+		}
+		delete(c.pending, id)
+	}
 }
 
 // Registry tracks the one live connection per online node.
@@ -115,6 +147,26 @@ func (r *Registry) Get(nodeID string) (*Conn, bool) {
 func (r *Registry) Connected(nodeID string) bool {
 	_, ok := r.Get(nodeID)
 	return ok
+}
+
+// SupportsPullImage reports whether a connected node advertised the pull_image
+// capability. False for offline nodes and for older daemons that predate it —
+// callers use this to avoid sending a command an old daemon can't decode.
+func (r *Registry) SupportsPullImage(nodeID string) bool {
+	conn, ok := r.Get(nodeID)
+	return ok && conn.supportsPull
+}
+
+// ConnectedNodeIDs returns the IDs of every node with a live connection.
+// Used to fan an image warm-up out to all online nodes.
+func (r *Registry) ConnectedNodeIDs() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := make([]string, 0, len(r.conns))
+	for id := range r.conns {
+		ids = append(ids, id)
+	}
+	return ids
 }
 
 // SendCommand is a convenience wrapper for the common case of looking the

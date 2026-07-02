@@ -158,9 +158,14 @@ export function ServerDetailPage() {
           <div>
             <strong>Provisioning…</strong>{" "}
             <span style={{ color: "var(--sp-text-muted)" }}>
-              the node is creating this server. A first launch pulls the Docker image and can take a few minutes — this
-              page updates on its own.
+              the node is bringing this server online — this page updates on its own. If the image is already cached it's
+              a matter of seconds; a cold node pulls it once, then it's fast forever.
             </span>
+            {server.status_message && (
+              <div className="sp-mono" style={{ fontSize: 12, marginTop: 4, color: "var(--sp-accent)" }}>
+                {server.status_message}
+              </div>
+            )}
           </div>
         </div>
       )}

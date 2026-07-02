@@ -7,6 +7,7 @@ package serversvc
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -22,15 +23,25 @@ import (
 type CommandSender interface {
 	SendCommand(nodeID string, cmd agenthub.CommandPayload) (agenthub.AckPayload, error)
 	SendCommandTimeout(nodeID string, cmd agenthub.CommandPayload, timeout time.Duration) (agenthub.AckPayload, error)
+	// ConnectedNodeIDs lists every node with a live connection, so an image
+	// warm-up can be fanned out to all online nodes.
+	ConnectedNodeIDs() []string
+	// SupportsPullImage reports whether a node advertised the pull_image
+	// capability, so we never send that command to an older daemon that would
+	// fail to decode it (and drop the connection).
+	SupportsPullImage(nodeID string) bool
 }
 
 const (
 	// defaultProvisionTimeout bounds an ordinary dispatch (image already
-	// present on the node).
+	// present on the node) — create, start, stop, etc.
 	defaultProvisionTimeout = 15 * time.Second
-	// ProvisionCreateTimeout bounds a first-time container create, which may
-	// pull a large image from a registry (minutes). CreateServer provisions in
-	// the background so this long wait never blocks the HTTP request.
+	// ProvisionCreateTimeout bounds an image pull, which on a cold node may
+	// fetch a large image from a registry (minutes). Provisioning pulls the
+	// image as an explicit first step, then create/start run under the short
+	// timeout since the image is already local. CreateServer provisions in the
+	// background so this long wait never blocks the HTTP request. Also used as
+	// the deadline for background image warm-ups.
 	ProvisionCreateTimeout = 10 * time.Minute
 )
 
@@ -216,18 +227,117 @@ func (s *Service) UnsuspendServer(serverID string) error {
 	return s.Servers.SetSuspended(serverID, false)
 }
 
-// provision builds the container spec for a server and dispatches
-// create + start to its node. The create dispatch gets createTimeout (it may
-// pull an image); the start that follows uses the ordinary timeout.
-func (s *Service) provision(server *models.Server, egg *models.Egg, createTimeout time.Duration) error {
+// provision builds the container spec for a server and provisions it on its
+// node in three explicit phases: pull the image (which may be slow on a cold
+// node — pullTimeout bounds it), create the container (fast, image is now
+// local), then start. Each phase is surfaced as a live status message so the
+// UI can show progress instead of a static spinner. When the node's image
+// cache is warm (see WarmImagesOnNode), the pull is a near-instant no-op and
+// the whole sequence finishes in seconds.
+func (s *Service) provision(server *models.Server, egg *models.Egg, pullTimeout time.Duration) error {
 	spec := s.buildSpec(server, egg)
-	if _, err := s.dispatchTimeout(server.NodeID, agenthub.ActionCreate, server.ID, spec, createTimeout); err != nil {
-		return fmt.Errorf("dispatch create: %w", err)
+
+	if s.Hub.SupportsPullImage(server.NodeID) {
+		// Fast path: pull the image explicitly (bounded by pullTimeout, streams
+		// progress), then create against the now-local image under the short
+		// timeout. Warmed nodes make the pull a near-instant no-op.
+		s.setPhase(server.ID, "Pulling image "+spec.Image+"…")
+		if _, err := s.dispatchPull(server.NodeID, server.ID, spec.Image, pullTimeout); err != nil {
+			return fmt.Errorf("dispatch pull: %w", err)
+		}
+		s.setPhase(server.ID, "Creating container…")
+		if _, err := s.dispatchTimeout(server.NodeID, agenthub.ActionCreate, server.ID, spec, defaultProvisionTimeout); err != nil {
+			return fmt.Errorf("dispatch create: %w", err)
+		}
+	} else {
+		// Legacy node (pre-0.4.0 daemon, no pull_image): fall back to the old
+		// behaviour — create under the long timeout so the daemon's own on-404
+		// pull can complete. Never send pull_image, which it can't decode.
+		s.setPhase(server.ID, "Creating container…")
+		if _, err := s.dispatchTimeout(server.NodeID, agenthub.ActionCreate, server.ID, spec, pullTimeout); err != nil {
+			return fmt.Errorf("dispatch create: %w", err)
+		}
 	}
+
+	s.setPhase(server.ID, "Starting…")
 	if _, err := s.dispatch(server.NodeID, agenthub.ActionStart, server.ID, nil); err != nil {
 		return fmt.Errorf("dispatch start: %w", err)
 	}
 	return nil
+}
+
+// setPhase records a live provisioning phase as the server's status message
+// (best-effort — the status itself stays "installing"). The UI polls while
+// installing and shows this so a slow first-time image pull looks like
+// progress rather than a hang.
+func (s *Service) setPhase(serverID, phase string) {
+	_ = s.Servers.SetStatusMessage(serverID, phase)
+}
+
+// dispatchPull asks a node to ensure an image is present (pulling it if
+// missing). serverID may be empty for a node-level warm-up; when set, the
+// node streams pull progress to that server's console.
+func (s *Service) dispatchPull(nodeID, serverID, image string, timeout time.Duration) (agenthub.AckPayload, error) {
+	ack, err := s.Hub.SendCommandTimeout(nodeID, agenthub.CommandPayload{
+		CommandID: uuid.NewString(),
+		Action:    agenthub.ActionPullImage,
+		ServerID:  serverID,
+		Image:     image,
+	}, timeout)
+	if err != nil {
+		return ack, err
+	}
+	if !ack.OK {
+		return ack, fmt.Errorf("%w: %s", ErrCommandFailed, ack.Error)
+	}
+	return ack, nil
+}
+
+// WarmImagesOnNode pre-pulls every egg's image onto a node in the background,
+// so the first real server create on that node hits Docker's local cache
+// instead of a multi-minute registry download. Fire-and-forget; runs after a
+// node connects. Pulls run sequentially in one goroutine to be gentle on the
+// node, and are idempotent (a present image is a fast no-op on the daemon).
+func (s *Service) WarmImagesOnNode(nodeID string) {
+	if !s.Hub.SupportsPullImage(nodeID) {
+		return // older daemon without pull_image — nothing to warm
+	}
+	images, err := s.Eggs.DistinctImages()
+	if err != nil {
+		log.Printf("serversvc: warm images on node %s: list egg images: %v", nodeID, err)
+		return
+	}
+	if len(images) == 0 {
+		return
+	}
+	go func() {
+		for _, img := range images {
+			if _, err := s.dispatchPull(nodeID, "", img, ProvisionCreateTimeout); err != nil {
+				log.Printf("serversvc: warm image %q on node %s: %v", img, nodeID, err)
+			}
+		}
+		log.Printf("serversvc: warmed %d image(s) on node %s", len(images), nodeID)
+	}()
+}
+
+// WarmImage pre-pulls a single image onto every connected node in the
+// background. Called when an egg's image is added or changed so a subsequent
+// server create is fast everywhere.
+func (s *Service) WarmImage(image string) {
+	if image == "" {
+		return
+	}
+	for _, nodeID := range s.Hub.ConnectedNodeIDs() {
+		if !s.Hub.SupportsPullImage(nodeID) {
+			continue // older daemon without pull_image
+		}
+		nid := nodeID
+		go func() {
+			if _, err := s.dispatchPull(nid, "", image, ProvisionCreateTimeout); err != nil {
+				log.Printf("serversvc: warm image %q on node %s: %v", image, nid, err)
+			}
+		}()
+	}
 }
 
 // buildSpec turns a server + its egg into a concrete container spec:

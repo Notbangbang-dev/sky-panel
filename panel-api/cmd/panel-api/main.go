@@ -49,6 +49,9 @@ func main() {
 	agentRegistry := agenthub.NewRegistry()
 	agentHandler := agenthub.NewHandler(agentRegistry, nodes, hub)
 	serverSvc := serversvc.NewService(servers, eggs, nodes, allocations, agentRegistry)
+	// Warm each node's Docker image cache as soon as it connects, so the first
+	// server create on it is fast instead of blocking on a cold image pull.
+	agentHandler.OnNodeConnected = serverSvc.WarmImagesOnNode
 
 	deps := httpapi.Deps{
 		Users:         users,

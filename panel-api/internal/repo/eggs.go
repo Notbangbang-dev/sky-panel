@@ -56,6 +56,26 @@ func (r *Eggs) List() ([]*models.Egg, error) {
 	return out, rows.Err()
 }
 
+// DistinctImages returns every unique Docker image referenced by an egg, so
+// nodes can pre-warm their image caches (see serversvc image warming).
+func (r *Eggs) DistinctImages() ([]string, error) {
+	rows, err := r.db.Query(`SELECT DISTINCT docker_image FROM eggs WHERE docker_image != '' ORDER BY docker_image`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var images []string
+	for rows.Next() {
+		var img string
+		if err := rows.Scan(&img); err != nil {
+			return nil, err
+		}
+		images = append(images, img)
+	}
+	return images, rows.Err()
+}
+
 func (r *Eggs) Update(e *models.Egg) error {
 	varsJSON, err := json.Marshal(e.Variables)
 	if err != nil {

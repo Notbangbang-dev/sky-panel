@@ -2,6 +2,26 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.0] - 2026-07-02
+
+### ✨ New Features
+
+- **Servers create in seconds.** Provisioning is now split into three visible phases — **pull image → create container → start** — and the only slow step (the image pull) is taken out of the critical path. When a node connects, the panel **pre-warms every egg's Docker image** in the background; adding or changing an egg's image re-warms it on every connected node. By the time you create a server the image is already cached, so create/start finish in seconds instead of blocking on a multi-minute download.
+- **Live provisioning progress.** The install and reinstall screens now show the real phase the node is on (&ldquo;Pulling image…&rdquo;, &ldquo;Creating container…&rdquo;, &ldquo;Starting…&rdquo;) streamed straight from the daemon, instead of a static spinner — the same treatment reinstall gets.
+- **Reinstall is fast too.** It reuses the warmed cache and the same phased flow, so rebuilding a container on a warm node is a matter of seconds, tracked live on the reinstall screen. Your volume and files are still preserved.
+
+### 🛠 Under the hood
+
+- New `pull_image` daemon command (idempotent — a no-op when the image is already present) and panel-side image warming on node-connect and egg change.
+
+### 📚 Docs
+
+- The marketing site's **Docs** page was rebuilt with a sticky scroll-spy sidebar, copy-to-clipboard code blocks and callouts, and now covers everything: architecture, install, fast provisioning, eggs, files & sharing, backups & automations, the coin economy, API keys and the security model. The **Changelog** page is now a proper release timeline.
+
+### 🔗 Requires
+
+- **sky-daemon v0.4.0** on your nodes for image warming and live pull progress (`sudo sky-panel-update` on each node). Without it, servers still create — just without the pre-warm speedup.
+
 ## [0.14.0] - 2026-07-02
 
 ### ✨ New Features

@@ -32,7 +32,7 @@ func TestSendCommandTimesOutWithoutAck(t *testing.T) {
 	}
 	defer ws.Close()
 
-	conn := newConn("node-1", ws, []byte("node-secret"))
+	conn := newConn("node-1", ws, []byte("node-secret"), nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
