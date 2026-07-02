@@ -8,6 +8,9 @@ const (
 	ReasonAdminAdjustment = "admin_adjustment"
 	ReasonStorePurchase   = "store_purchase"
 	ReasonStoreRefund     = "store_refund"
+	ReasonGiftSent        = "gift_sent"
+	ReasonGiftReceived    = "gift_received"
+	ReasonRedeemCode      = "redeem_code"
 )
 
 type LedgerEntry struct {

@@ -1374,6 +1374,18 @@ a.sp-card:hover {
   box-shadow: 0 0 8px var(--sp-accent);
   animation: sp-pulse 2s ease-in-out infinite;
 }
+
+/* ---------- Impersonation banner ---------- */
+.sp-impersonation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--sp-accent) 45%, var(--sp-surface-border));
+  background: color-mix(in srgb, var(--sp-accent) 12%, var(--sp-bg));
+  color: var(--sp-text);
+}
 @keyframes sp-pulse {
   0%,
   100% {

@@ -64,6 +64,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Delete("/{serverID}", d.DeleteServer)
 				r.Post("/{serverID}/power", d.PowerAction)
 				r.Post("/{serverID}/reinstall", d.ReinstallServer)
+				r.Put("/{serverID}/description", d.SetServerDescription)
 				r.Post("/{serverID}/console", d.ConsoleInput)
 				r.Get("/{serverID}/activity", d.ServerActivity)
 
@@ -100,6 +101,9 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/store", d.ListStore)
 			r.Post("/store/purchase", d.PurchaseStoreItem)
 
+			r.Post("/coins/gift", d.GiftCoins)
+			r.Post("/coins/redeem", d.RedeemCode)
+
 			r.Group(func(r chi.Router) {
 				r.Use(auth.RequireRole(string(models.RoleAdmin)))
 
@@ -109,12 +113,21 @@ func NewRouter(d Deps) http.Handler {
 					r.Get("/{userID}/quota", d.AdminGetUserQuota)
 					r.Put("/{userID}/quota", d.AdminSetUserQuota)
 					r.Post("/{userID}/role", d.AdminSetUserRole)
+					r.Post("/{userID}/impersonate", d.AdminImpersonate)
 					r.Delete("/{userID}", d.AdminDeleteUser)
 				})
 
 				r.Route("/admin/servers", func(r chi.Router) {
+					r.Get("/", d.AdminListServers)
 					r.Post("/{serverID}/suspend", d.AdminSuspendServer)
 					r.Post("/{serverID}/unsuspend", d.AdminUnsuspendServer)
+					r.Post("/{serverID}/owner", d.AdminTransferServer)
+				})
+
+				r.Route("/admin/redeem-codes", func(r chi.Router) {
+					r.Get("/", d.AdminListRedeemCodes)
+					r.Post("/", d.AdminCreateRedeemCode)
+					r.Delete("/{codeID}", d.AdminDeleteRedeemCode)
 				})
 
 				r.Route("/admin/nodes", func(r chi.Router) {
@@ -198,7 +211,15 @@ func (d Deps) authorizedForTopic(claims *auth.Claims, topic string) bool {
 	if err != nil {
 		return false
 	}
-	return server.OwnerID == claims.UserID
+	if server.OwnerID == claims.UserID {
+		return true
+	}
+	// A subuser granted access to this server may also watch its live topics —
+	// otherwise they can control it over HTTP but never see real-time updates.
+	if _, err := d.Subusers.Get(parts[1], claims.UserID); err == nil {
+		return true
+	}
+	return false
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

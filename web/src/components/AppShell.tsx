@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { ImpersonationBanner } from "./ImpersonationBanner";
 import { useAuthStore } from "../lib/authStore";
 import { authApi } from "../lib/endpoints";
 
@@ -40,6 +41,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="sp-shell">
       <Sidebar isAdmin={user?.role === "admin"} />
       <div className="sp-shell__main">
+        <ImpersonationBanner />
         <Topbar username={user?.username ?? ""} coins={user?.coins ?? 0} />
         <main className="sp-shell__content">{children}</main>
       </div>

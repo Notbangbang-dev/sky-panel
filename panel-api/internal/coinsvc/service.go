@@ -178,16 +178,14 @@ func (s *Service) Heartbeat(userID, sessionID string) (HeartbeatResult, error) {
 func (s *Service) ClaimDailyReward(userID string) (credited, balance int64, err error) {
 	now := s.clock()
 
-	last, found, err := s.DailyRewards.LastClaimed(userID)
+	// Record the claim atomically (conditional on being due) so two concurrent
+	// requests can't both pass a separate time-check and double-credit.
+	claimed, err := s.DailyRewards.ClaimIfDue(userID, now, now.Add(-s.dailyInterval()))
 	if err != nil {
 		return 0, 0, err
 	}
-	if found && now.Sub(last) < s.dailyInterval() {
+	if !claimed {
 		return 0, 0, ErrDailyRewardAlreadyClaimed
-	}
-
-	if err := s.DailyRewards.SetLastClaimed(userID, now); err != nil {
-		return 0, 0, err
 	}
 
 	amount := s.dailyAmount()
@@ -202,6 +200,26 @@ func (s *Service) ClaimDailyReward(userID string) (credited, balance int64, err 
 // e.g. from the admin console.
 func (s *Service) AdminAdjust(userID string, amount int64, note string) (balance int64, err error) {
 	return s.Ledger.AddEntry(userID, amount, models.ReasonAdminAdjustment, note)
+}
+
+// ErrGiftToSelf is returned when a user tries to gift coins to their own account.
+var ErrGiftToSelf = errors.New("cannot gift coins to yourself")
+
+// Gift transfers `amount` coins from the sender to the recipient (looked up by
+// username), atomically. Fails if the amount isn't positive, the recipient
+// doesn't exist, the sender is the recipient, or the sender lacks the balance.
+func (s *Service) Gift(fromUserID, toUsername string, amount int64) (newBalance int64, err error) {
+	if amount <= 0 {
+		return 0, errors.New("gift amount must be positive")
+	}
+	recipient, err := s.Users.GetByUsername(toUsername)
+	if err != nil {
+		return 0, err // repo.ErrNotFound when the username is unknown
+	}
+	if recipient.ID == fromUserID {
+		return 0, ErrGiftToSelf
+	}
+	return s.Ledger.Transfer(fromUserID, recipient.ID, amount, models.ReasonGiftSent, models.ReasonGiftReceived, "@"+toUsername)
 }
 
 func (s *Service) balance(userID string) (int64, error) {

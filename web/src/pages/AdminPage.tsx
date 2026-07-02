@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { AdminUsersTab } from "../components/admin/AdminUsersTab";
+import { AdminServersTab } from "../components/admin/AdminServersTab";
+import { AdminCodesTab } from "../components/admin/AdminCodesTab";
 import { AdminNodesTab } from "../components/admin/AdminNodesTab";
 import { AdminAllocationsTab } from "../components/admin/AdminAllocationsTab";
 import { AdminEggsTab } from "../components/admin/AdminEggsTab";
@@ -9,7 +11,7 @@ import { AdminSettingsTab } from "../components/admin/AdminSettingsTab";
 import { AdminAuditTab } from "../components/admin/AdminAuditTab";
 import { AdminBroadcastTab } from "../components/admin/AdminBroadcastTab";
 
-const TABS = ["Users", "Nodes", "Allocations", "Eggs", "Economy", "Quotas", "Settings", "Audit log", "Broadcast"] as const;
+const TABS = ["Users", "Servers", "Nodes", "Allocations", "Eggs", "Economy", "Codes", "Quotas", "Settings", "Audit log", "Broadcast"] as const;
 type Tab = (typeof TABS)[number];
 
 export function AdminPage() {
@@ -33,10 +35,12 @@ export function AdminPage() {
       </div>
 
       {tab === "Users" && <AdminUsersTab />}
+      {tab === "Servers" && <AdminServersTab />}
       {tab === "Nodes" && <AdminNodesTab />}
       {tab === "Allocations" && <AdminAllocationsTab />}
       {tab === "Eggs" && <AdminEggsTab />}
       {tab === "Economy" && <AdminEconomyTab />}
+      {tab === "Codes" && <AdminCodesTab />}
       {tab === "Quotas" && <AdminQuotasTab />}
       {tab === "Settings" && <AdminSettingsTab />}
       {tab === "Audit log" && <AdminAuditTab />}

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "../../lib/endpoints";
+import { useAuthStore } from "../../lib/authStore";
 import { bytesPerMB, formatBytes } from "../../lib/format";
 
 interface QuotaDraft {
@@ -43,6 +44,14 @@ export function AdminUsersTab() {
     onSuccess: invalidate,
   });
   const deleteUser = useMutation({ mutationFn: (id: string) => adminApi.deleteUser(id), onSuccess: invalidate });
+  const beginImpersonation = useAuthStore((s) => s.beginImpersonation);
+  const impersonate = useMutation({
+    mutationFn: (id: string) => adminApi.impersonate(id),
+    onSuccess: (tokens) => {
+      beginImpersonation(tokens);
+      window.location.href = "/"; // reload into the target's session
+    },
+  });
   const adjust = useMutation({
     mutationFn: ({ id, amount }: { id: string; amount: number }) => adminApi.adjustCoins(id, amount),
     onSuccess: invalidate,
@@ -113,7 +122,20 @@ export function AdminUsersTab() {
                   <button className="sp-btn sp-btn--sm" onClick={() => toggleQuota(u.id)}>
                     Quota
                   </button>
-                  <button className="sp-btn sp-btn--sm sp-btn--danger" onClick={() => deleteUser.mutate(u.id)}>
+                  <button
+                    className="sp-btn sp-btn--sm"
+                    onClick={() => impersonate.mutate(u.id)}
+                    disabled={impersonate.isPending}
+                    title="Open the panel as this user"
+                  >
+                    View as
+                  </button>
+                  <button
+                    className="sp-btn sp-btn--sm sp-btn--danger"
+                    onClick={() => {
+                      if (window.confirm(`Delete user “${u.username}”? This can't be undone.`)) deleteUser.mutate(u.id);
+                    }}
+                  >
                     Delete
                   </button>
                 </div>

@@ -148,6 +148,12 @@ export function ServerDetailPage() {
               </span>
             )}
           </div>
+
+          {server.description && (
+            <p className="sp-mono" style={{ fontSize: 12, color: "var(--sp-text-muted)", marginTop: 8, maxWidth: 620 }}>
+              {server.description}
+            </p>
+          )}
         </div>
 
         <div className="sp-ctl-bar">

@@ -37,8 +37,10 @@ type Server struct {
 	// StatusMessage carries human-readable detail for the current status —
 	// e.g. why provisioning errored. Empty on healthy transitions.
 	StatusMessage string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	// Description is a free-text note the owner can attach to the server.
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type Allocation struct {

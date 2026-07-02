@@ -30,6 +30,7 @@ type Deps struct {
 	Subusers    *repo.Subusers
 	Quotas      *repo.Quotas
 	Schedules   *repo.Schedules
+	RedeemCodes *repo.RedeemCodes
 	ServerSvc   *serversvc.Service
 	AgentHub    *agenthub.Handler
 	CoinSvc     *coinsvc.Service

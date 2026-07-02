@@ -15,6 +15,17 @@ export function SettingsTab({ server }: { server: Server }) {
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  const [description, setDescription] = useState(server.description ?? "");
+  const [descSaved, setDescSaved] = useState(false);
+  const saveDescription = useMutation({
+    mutationFn: () => serversApi.setDescription(server.id, description),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["servers", server.id] });
+      setDescSaved(true);
+      setTimeout(() => setDescSaved(false), 2500);
+    },
+  });
+
   const save = useMutation({
     mutationFn: () =>
       serversApi.update(server.id, {
@@ -34,16 +45,37 @@ export function SettingsTab({ server }: { server: Server }) {
   });
 
   return (
-    <form
-      className="sp-surface sp-card"
-      style={{ maxWidth: 480 }}
-      onSubmit={(e) => {
-        e.preventDefault();
-        setError(null);
-        setSaved(false);
-        save.mutate();
-      }}
-    >
+    <>
+      <div className="sp-surface sp-card" style={{ maxWidth: 480, marginBottom: 16 }}>
+        <div className="sp-field" style={{ marginBottom: 8 }}>
+          <label className="sp-label">Notes / description</label>
+          <textarea
+            className="sp-textarea"
+            style={{ width: "100%", minHeight: 70 }}
+            maxLength={500}
+            placeholder="What's this server for? (only you and admins see this)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button className="sp-btn sp-btn--sm sp-btn--primary" onClick={() => saveDescription.mutate()} disabled={saveDescription.isPending}>
+            Save notes
+          </button>
+          {descSaved && <span className="sp-mono" style={{ fontSize: 12, color: "var(--sp-accent)" }}>Saved — no restart needed.</span>}
+        </div>
+      </div>
+
+      <form
+        className="sp-surface sp-card"
+        style={{ maxWidth: 480 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          setError(null);
+          setSaved(false);
+          save.mutate();
+        }}
+      >
       <div className="sp-field">
         <label className="sp-label">Name</label>
         <input className="sp-input" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -112,6 +144,7 @@ export function SettingsTab({ server }: { server: Server }) {
       <button className="sp-btn sp-btn--primary" type="submit" disabled={save.isPending}>
         {save.isPending ? "Saving…" : "Save changes"}
       </button>
-    </form>
+      </form>
+    </>
   );
 }

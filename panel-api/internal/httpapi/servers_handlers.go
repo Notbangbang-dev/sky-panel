@@ -40,6 +40,7 @@ type serverResponse struct {
 	LastBackupAt        string            `json:"last_backup_at,omitempty"`
 	Suspended           bool              `json:"suspended"`
 	StatusMessage       string            `json:"status_message,omitempty"`
+	Description         string            `json:"description"`
 }
 
 func toServerResponse(s *models.Server) serverResponse {
@@ -47,7 +48,7 @@ func toServerResponse(s *models.Server) serverResponse {
 		ID: s.ID, OwnerID: s.OwnerID, NodeID: s.NodeID, EggID: s.EggID, Name: s.Name,
 		Status: string(s.Status), MemoryBytes: s.MemoryBytes, CPULimit: s.CPULimit, DiskBytes: s.DiskBytes,
 		PrimaryPort: s.PrimaryPort, Variables: s.Variables, BackupIntervalHours: s.BackupIntervalHours,
-		Suspended: s.Suspended, StatusMessage: s.StatusMessage,
+		Suspended: s.Suspended, StatusMessage: s.StatusMessage, Description: s.Description,
 	}
 	if s.LastBackupAt != nil {
 		resp.LastBackupAt = s.LastBackupAt.Format(rfc3339)

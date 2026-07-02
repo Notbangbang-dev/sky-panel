@@ -2,6 +2,32 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.16.0] - 2026-07-02
+
+### ✨ New Features
+
+More from the cloud-panel playbook, plus the requested admin "view as":
+
+- **View as user (admin).** From Admin → Users, an admin can open the panel exactly as any user sees it — their servers, wallet, quota — with a banner across the top and a one-click **Exit view-as** that restores the admin session. Every impersonation is audit-logged.
+- **Admin fleet view + server transfer.** A new Admin → **Servers** tab lists every server across all owners (with owner and status) and links straight to each; admins can **transfer** a server to a different owner.
+- **Server notes.** Owners can attach a free-text description to a server (Settings → Notes); it shows on the server header. Saving notes doesn't restart the server.
+- **Gift coins.** Send coins to another user by username from your Wallet — an atomic transfer that debits you and credits them.
+- **Redeem codes.** Admins mint coin codes (Admin → Codes) with an optional max-uses; users redeem them on their Wallet. Each user can redeem a given code once.
+
+### 🔒 Security &amp; hardening
+
+An adversarial audit of this release (and the surrounding code) turned up and fixed:
+
+- **Daily reward could be double-claimed** under a race — the claim is now recorded atomically (conditional upsert), so concurrent requests can't both credit.
+- **Redeem codes could slightly exceed their max-uses** under concurrent redemptions — the use-count is now bumped with a race-safe conditional update.
+- **Coin-balance overflow** — single grants (gift, redeem code) are capped and balance arithmetic is overflow-guarded, so a huge value can't wrap a balance negative.
+- **File uploads** now have a request-body size cap at the API, so an oversized upload can't exhaust memory before the node's 10 MB limit kicks in.
+- **Subusers** granted access to a server can now receive its live console/stats over the WebSocket (previously only owners/admins could subscribe).
+
+### 🔗 Requires
+
+- Panel-only release — works with sky-daemon v0.4.x.
+
 ## [0.15.4] - 2026-07-02
 
 ### ✨ New Features

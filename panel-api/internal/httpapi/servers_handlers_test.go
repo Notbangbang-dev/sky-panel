@@ -51,6 +51,7 @@ func newFullTestRouter(t *testing.T) (http.Handler, *repo.Allocations) {
 	settings := repo.NewSettings(db)
 	apiKeys := repo.NewAPIKeys(db)
 	schedules := repo.NewSchedules(db)
+	redeemCodes := repo.NewRedeemCodes(db)
 	hub := wshub.NewHub()
 
 	registry := agenthub.NewRegistry()
@@ -69,6 +70,7 @@ func newFullTestRouter(t *testing.T) (http.Handler, *repo.Allocations) {
 		Quotas:        quotas,
 		APIKeys:       apiKeys,
 		Schedules:     schedules,
+		RedeemCodes:   redeemCodes,
 		ServerSvc:     serversvc.NewService(servers, eggs, nodes, allocations, registry),
 		AgentHub:      agentHandler,
 		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards, settings),

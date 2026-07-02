@@ -80,6 +80,20 @@ export interface Server {
   last_backup_at?: string;
   suspended: boolean;
   status_message?: string;
+  description: string;
+}
+
+export interface AdminServer extends Server {
+  owner_username: string;
+}
+
+export interface RedeemCode {
+  id: string;
+  code: string;
+  coins: number;
+  max_uses: number;
+  uses: number;
+  created_at: string;
 }
 
 export interface BackupEntry {

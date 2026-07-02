@@ -1,6 +1,7 @@
 import { apiRequest } from "./api";
 import type {
   AdminQuotaInfo,
+  AdminServer,
   Allocation,
   ApiKey,
   AuditEntry,
@@ -17,6 +18,7 @@ import type {
   Permission,
   QuotaInfo,
   ReadFileResult,
+  RedeemCode,
   RotateNodeTokenResult,
   Schedule,
   ScheduleAction,
@@ -105,6 +107,8 @@ export const serversApi = {
     apiRequest<void>(`/api/v1/servers/${id}/power`, { method: "POST", body: { action } }),
   consoleInput: (id: string, input: string) =>
     apiRequest<void>(`/api/v1/servers/${id}/console`, { method: "POST", body: { input } }),
+  setDescription: (id: string, description: string) =>
+    apiRequest<void>(`/api/v1/servers/${id}/description`, { method: "PUT", body: { description } }),
 };
 
 export const backupsApi = {
@@ -159,6 +163,9 @@ export const coinsApi = {
   heartbeat: (sessionId: string) =>
     apiRequest<HeartbeatResult>("/api/v1/afk/heartbeat", { method: "POST", body: { session_id: sessionId } }),
   claimDaily: () => apiRequest<CoinResult>("/api/v1/daily-reward/claim", { method: "POST" }),
+  gift: (username: string, amount: number) =>
+    apiRequest<CoinResult>("/api/v1/coins/gift", { method: "POST", body: { username, amount } }),
+  redeem: (code: string) => apiRequest<CoinResult>("/api/v1/coins/redeem", { method: "POST", body: { code } }),
 };
 
 export const quotaApi = {
@@ -194,9 +201,19 @@ export const adminApi = {
   getUserQuota: (userId: string) => apiRequest<AdminQuotaInfo>(`/api/v1/admin/users/${userId}/quota`),
   setUserQuota: (userId: string, quota: { memory_bytes: number; cpu_percent: number; disk_bytes: number }) =>
     apiRequest<AdminQuotaInfo>(`/api/v1/admin/users/${userId}/quota`, { method: "PUT", body: quota }),
+  impersonate: (userId: string) =>
+    apiRequest<TokenPair>(`/api/v1/admin/users/${userId}/impersonate`, { method: "POST" }),
 
+  listAllServers: () => apiRequest<AdminServer[]>("/api/v1/admin/servers"),
+  transferServer: (id: string, ownerId: string) =>
+    apiRequest<void>(`/api/v1/admin/servers/${id}/owner`, { method: "POST", body: { owner_id: ownerId } }),
   suspendServer: (id: string) => apiRequest<void>(`/api/v1/admin/servers/${id}/suspend`, { method: "POST" }),
   unsuspendServer: (id: string) => apiRequest<void>(`/api/v1/admin/servers/${id}/unsuspend`, { method: "POST" }),
+
+  listRedeemCodes: () => apiRequest<RedeemCode[]>("/api/v1/admin/redeem-codes"),
+  createRedeemCode: (code: string, coins: number, maxUses: number) =>
+    apiRequest<RedeemCode>("/api/v1/admin/redeem-codes", { method: "POST", body: { code, coins, max_uses: maxUses } }),
+  deleteRedeemCode: (id: string) => apiRequest<void>(`/api/v1/admin/redeem-codes/${id}`, { method: "DELETE" }),
 
   listNodes: () => apiRequest<Node[]>("/api/v1/admin/nodes"),
   createNode: (name: string, address: string) =>

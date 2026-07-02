@@ -17,7 +17,7 @@ func NewServers(db *sql.DB) *Servers {
 	return &Servers{db: db}
 }
 
-const serverColumns = `id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, disk_bytes, variables_json, primary_port, backup_interval_hours, last_backup_at, suspended, status_message, created_at, updated_at`
+const serverColumns = `id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, disk_bytes, variables_json, primary_port, backup_interval_hours, last_backup_at, suspended, status_message, description, created_at, updated_at`
 
 func (r *Servers) Create(s *models.Server) error {
 	varsJSON, err := json.Marshal(s.Variables)
@@ -25,9 +25,9 @@ func (r *Servers) Create(s *models.Server) error {
 		return err
 	}
 	_, err = r.db.Exec(
-		`INSERT INTO servers (id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, disk_bytes, variables_json, primary_port, backup_interval_hours, last_backup_at, suspended, status_message, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.ID, s.OwnerID, s.NodeID, s.EggID, s.Name, s.ContainerID, string(s.Status), s.MemoryBytes, s.CPULimit, s.DiskBytes, varsJSON, s.PrimaryPort, s.BackupIntervalHours, s.LastBackupAt, s.Suspended, s.StatusMessage, s.CreatedAt, s.UpdatedAt,
+		`INSERT INTO servers (id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, disk_bytes, variables_json, primary_port, backup_interval_hours, last_backup_at, suspended, status_message, description, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.OwnerID, s.NodeID, s.EggID, s.Name, s.ContainerID, string(s.Status), s.MemoryBytes, s.CPULimit, s.DiskBytes, varsJSON, s.PrimaryPort, s.BackupIntervalHours, s.LastBackupAt, s.Suspended, s.StatusMessage, s.Description, s.CreatedAt, s.UpdatedAt,
 	)
 	return err
 }
@@ -93,6 +93,18 @@ func (r *Servers) SetError(id, message string) error {
 		`UPDATE servers SET status = ?, status_message = ?, updated_at = ? WHERE id = ?`,
 		string(models.StatusErrored), message, time.Now().UTC(), id,
 	)
+	return checkRowsAffected(res, err)
+}
+
+// SetDescription updates a server's free-text note (no re-provision).
+func (r *Servers) SetDescription(id, description string) error {
+	res, err := r.db.Exec(`UPDATE servers SET description = ?, updated_at = ? WHERE id = ?`, description, time.Now().UTC(), id)
+	return checkRowsAffected(res, err)
+}
+
+// SetOwner reassigns a server to a different owner (admin transfer).
+func (r *Servers) SetOwner(id, ownerID string) error {
+	res, err := r.db.Exec(`UPDATE servers SET owner_id = ?, updated_at = ? WHERE id = ?`, ownerID, time.Now().UTC(), id)
 	return checkRowsAffected(res, err)
 }
 
@@ -167,7 +179,7 @@ func scanServerRow(row rowScanner) (*models.Server, error) {
 	var status, varsJSON string
 	var lastBackup sql.NullTime
 
-	if err := row.Scan(&s.ID, &s.OwnerID, &s.NodeID, &s.EggID, &s.Name, &s.ContainerID, &status, &s.MemoryBytes, &s.CPULimit, &s.DiskBytes, &varsJSON, &s.PrimaryPort, &s.BackupIntervalHours, &lastBackup, &s.Suspended, &s.StatusMessage, &s.CreatedAt, &s.UpdatedAt); err != nil {
+	if err := row.Scan(&s.ID, &s.OwnerID, &s.NodeID, &s.EggID, &s.Name, &s.ContainerID, &status, &s.MemoryBytes, &s.CPULimit, &s.DiskBytes, &varsJSON, &s.PrimaryPort, &s.BackupIntervalHours, &lastBackup, &s.Suspended, &s.StatusMessage, &s.Description, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return nil, err
 	}
 

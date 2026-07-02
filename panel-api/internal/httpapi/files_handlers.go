@@ -88,6 +88,11 @@ func (d Deps) WriteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Cap the body so an oversized upload can't exhaust memory during decode —
+	// the daemon rejects >10MB decoded content, and 16MB covers that plus
+	// base64 (~33%) and JSON overhead.
+	r.Body = http.MaxBytesReader(w, r.Body, 16<<20)
+
 	var req writeFileRequest
 	if err := decodeJSON(r, &req); err != nil || req.Path == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "path and content_base64 are required")
