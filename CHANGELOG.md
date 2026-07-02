@@ -2,6 +2,12 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.15.1] - 2026-07-02
+
+### 🛠 Fixes
+
+- **Fixed servers erroring with `node reported command failure: node disconnected`.** An egg with no startup command (all the Minecraft eggs, which are driven entirely by env vars) made the panel send `"cmd":null` in the create command. The daemon couldn't decode `null` as a command list, which failed the whole message and dropped the node's connection — so creating or reinstalling most servers always errored. The panel now sends an empty list (`[]`) instead, so the image's own startup runs as intended. **This is a panel-only fix — `sudo sky-panel-update` on the panel box and the reinstall works.** (Pair it with sky-daemon v0.4.2, which also hardens the daemon against this class of decode error.)
+
 ## [0.15.0] - 2026-07-02
 
 ### ✨ New Features

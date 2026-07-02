@@ -1,6 +1,7 @@
 package serversvc
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -165,6 +166,52 @@ func TestCreateServerHappyPath(t *testing.T) {
 	}
 	if persisted.Status != models.StatusRunning {
 		t.Errorf("expected persisted status running, got %q", persisted.Status)
+	}
+}
+
+func TestEmptyStartupSerializesCmdAsEmptyListNotNull(t *testing.T) {
+	// Regression: an egg with no startup command must not put "cmd":null on the
+	// wire — the daemon can't decode null into a list and drops the connection
+	// ("node reported command failure: node disconnected").
+	sender := &fakeSender{}
+	svc, nodes, eggs, _, users := newTestService(t, sender)
+
+	node := seedNode(t, nodes)
+	owner := seedUser(t, users)
+	egg := &models.Egg{
+		ID: uuid.NewString(), Name: "Paper", DockerImage: "itzg/minecraft-server",
+		Startup: "", CreatedAt: time.Now().UTC(), // no startup command
+	}
+	if err := eggs.Create(egg); err != nil {
+		t.Fatalf("seed egg: %v", err)
+	}
+	if err := svc.Allocations.Create(uuid.NewString(), node.ID, 25565); err != nil {
+		t.Fatalf("seed allocation: %v", err)
+	}
+
+	server, err := svc.CreateServer(owner.ID, node.ID, egg.ID, "Sky", 1024, 0, 0, nil)
+	if err != nil {
+		t.Fatalf("CreateServer: %v", err)
+	}
+	if err := svc.Provision(server.ID, defaultProvisionTimeout); err != nil {
+		t.Fatalf("Provision: %v", err)
+	}
+
+	var createCmd *agenthub.CommandPayload
+	for i := range sender.commands {
+		if sender.commands[i].Action == agenthub.ActionCreate {
+			createCmd = &sender.commands[i]
+		}
+	}
+	if createCmd == nil || createCmd.Spec == nil {
+		t.Fatal("expected a create command with a spec")
+	}
+	if createCmd.Spec.Cmd == nil {
+		t.Error("Cmd must be a non-nil empty slice, not nil (which marshals to null)")
+	}
+	raw, _ := json.Marshal(createCmd.Spec)
+	if !strings.Contains(string(raw), `"cmd":[]`) || strings.Contains(string(raw), `"cmd":null`) {
+		t.Errorf("expected \"cmd\":[] on the wire, got: %s", raw)
 	}
 }
 

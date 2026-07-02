@@ -365,10 +365,20 @@ func (s *Service) buildSpec(server *models.Server, egg *models.Egg) *agenthub.Co
 	// (1 core = 1e9). 0 leaves it unlimited.
 	nanoCPUs := int64(server.CPULimit) * 10_000_000
 
+	// An egg with no startup command (e.g. itzg/minecraft-server, which is
+	// driven entirely by env vars) tokenizes to a nil slice. A nil slice
+	// marshals to JSON `null`, which the daemon can't decode into a list —
+	// killing the whole command and dropping the connection. Send an empty
+	// list instead; the daemon omits an empty Cmd so the image's own CMD runs.
+	cmd := tokenizeCommand(substitute(egg.Startup, resolved))
+	if cmd == nil {
+		cmd = []string{}
+	}
+
 	return &agenthub.ContainerSpec{
 		Name:        "sky-" + server.ID,
 		Image:       egg.DockerImage,
-		Cmd:         tokenizeCommand(substitute(egg.Startup, resolved)),
+		Cmd:         cmd,
 		Env:         env,
 		WorkingDir:  "/home/container",
 		Binds:       []string{fmt.Sprintf("/srv/sky-panel/volumes/%s:/home/container", server.ID)},
