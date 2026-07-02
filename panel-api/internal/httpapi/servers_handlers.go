@@ -36,6 +36,7 @@ type serverResponse struct {
 	Variables           map[string]string `json:"variables"`
 	BackupIntervalHours int               `json:"backup_interval_hours"`
 	LastBackupAt        string            `json:"last_backup_at,omitempty"`
+	Suspended           bool              `json:"suspended"`
 }
 
 func toServerResponse(s *models.Server) serverResponse {
@@ -43,6 +44,7 @@ func toServerResponse(s *models.Server) serverResponse {
 		ID: s.ID, OwnerID: s.OwnerID, NodeID: s.NodeID, EggID: s.EggID, Name: s.Name,
 		Status: string(s.Status), MemoryBytes: s.MemoryBytes, CPULimit: s.CPULimit, DiskBytes: s.DiskBytes,
 		PrimaryPort: s.PrimaryPort, Variables: s.Variables, BackupIntervalHours: s.BackupIntervalHours,
+		Suspended: s.Suspended,
 	}
 	if s.LastBackupAt != nil {
 		resp.LastBackupAt = s.LastBackupAt.Format(rfc3339)
@@ -176,6 +178,12 @@ func (d Deps) loadServerWithPermission(w http.ResponseWriter, r *http.Request, r
 	return nil
 }
 
+// isAdmin reports whether the authenticated caller is an admin.
+func (d Deps) isAdmin(r *http.Request) bool {
+	claims, ok := auth.FromContext(r.Context())
+	return ok && claims.Role == string(models.RoleAdmin)
+}
+
 func (d Deps) GetServer(w http.ResponseWriter, r *http.Request) {
 	server := d.loadServerWithPermission(w, r, "")
 	if server == nil {
@@ -221,6 +229,13 @@ func (d Deps) PowerAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A suspended server can't be started by its owner (stop/kill stay allowed
+	// so it can be shut down). Admins are exempt.
+	if server.Suspended && req.Action == agenthub.ActionStart && !d.isAdmin(r) {
+		writeError(w, http.StatusForbidden, "server_suspended", "this server is suspended by an administrator")
+		return
+	}
+
 	if err := d.ServerSvc.PowerAction(server.ID, req.Action); err != nil {
 		writeError(w, http.StatusBadGateway, "node_dispatch_failed", err.Error())
 		return
@@ -236,6 +251,11 @@ type consoleInputRequest struct {
 func (d Deps) ConsoleInput(w http.ResponseWriter, r *http.Request) {
 	server := d.loadServerWithPermission(w, r, models.PermConsole)
 	if server == nil {
+		return
+	}
+
+	if server.Suspended && !d.isAdmin(r) {
+		writeError(w, http.StatusForbidden, "server_suspended", "this server is suspended by an administrator")
 		return
 	}
 
@@ -276,6 +296,12 @@ type updateServerRequest struct {
 func (d Deps) UpdateServer(w http.ResponseWriter, r *http.Request) {
 	server := d.loadServerWithPermission(w, r, models.PermSettings)
 	if server == nil {
+		return
+	}
+	// Saving settings re-provisions (and starts) the container, so a suspended
+	// owner must not be able to use it as a back door to restart. Admins may.
+	if server.Suspended && !d.isAdmin(r) {
+		writeError(w, http.StatusForbidden, "server_suspended", "this server is suspended by an administrator")
 		return
 	}
 
@@ -326,6 +352,10 @@ func (d Deps) UpdateServer(w http.ResponseWriter, r *http.Request) {
 func (d Deps) ReinstallServer(w http.ResponseWriter, r *http.Request) {
 	server := d.loadServerWithPermission(w, r, models.PermSettings)
 	if server == nil {
+		return
+	}
+	if server.Suspended && !d.isAdmin(r) {
+		writeError(w, http.StatusForbidden, "server_suspended", "this server is suspended by an administrator")
 		return
 	}
 	if err := d.ServerSvc.ReinstallServer(server.ID); err != nil {

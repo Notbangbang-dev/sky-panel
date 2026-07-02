@@ -201,6 +201,11 @@ export function ServersListPage() {
               </td>
               <td>
                 <StatusBadge status={server.status} />
+                {server.suspended && (
+                  <span className="sp-badge" style={{ marginLeft: 6, color: "#ff9b9b", borderColor: "#ff9b9b" }}>
+                    suspended
+                  </span>
+                )}
               </td>
               <td className="sp-mono">{server.primary_port}</td>
               <td className="sp-mono">{(server.memory_bytes / 1024 / 1024).toFixed(0)}MB</td>

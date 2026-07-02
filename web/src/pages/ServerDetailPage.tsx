@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { serversApi } from "../lib/endpoints";
+import { adminApi, serversApi } from "../lib/endpoints";
 import { useTopic } from "../lib/useTopic";
 import { useAuthStore } from "../lib/authStore";
 import { Console } from "../components/Console";
@@ -30,7 +30,8 @@ export function ServerDetailPage() {
 
   const { data: server } = useQuery({ queryKey: ["servers", id], queryFn: () => serversApi.get(id!), enabled: !!id });
 
-  const canManage = !!server && !!user && (server.owner_id === user.id || user.role === "admin");
+  const isAdmin = user?.role === "admin";
+  const canManage = !!server && !!user && (server.owner_id === user.id || isAdmin);
   const visibleTabs = TABS.filter((t) => (t !== "Sharing" && t !== "Settings") || canManage);
   const [tab, setTab] = useState<Tab>("Console");
 
@@ -57,6 +58,11 @@ export function ServerDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["servers", id] }),
   });
 
+  const suspend = useMutation({
+    mutationFn: (s: boolean) => (s ? adminApi.suspendServer(id!) : adminApi.unsuspendServer(id!)),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["servers", id] }),
+  });
+
   const sendInput = (line: string) => serversApi.consoleInput(id!, line).catch(() => {});
 
   if (!server) return <p className="sp-mono">loading…</p>;
@@ -69,9 +75,19 @@ export function ServerDetailPage() {
             {server.name}
           </h1>
           <StatusBadge status={server.status} />
+          {server.suspended && (
+            <span className="sp-badge" style={{ color: "#ff9b9b", borderColor: "#ff9b9b" }}>
+              suspended
+            </span>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="sp-btn" onClick={() => power.mutate("start")}>
+          <button
+            className="sp-btn"
+            onClick={() => power.mutate("start")}
+            disabled={server.suspended && !isAdmin}
+            title={server.suspended && !isAdmin ? "This server is suspended by an administrator" : undefined}
+          >
             Start
           </button>
           <button className="sp-btn" onClick={() => power.mutate("stop")}>
@@ -80,6 +96,15 @@ export function ServerDetailPage() {
           <button className="sp-btn sp-btn--danger" onClick={() => power.mutate("kill")}>
             Kill
           </button>
+          {isAdmin && (
+            <button
+              className="sp-btn sp-btn--danger"
+              onClick={() => suspend.mutate(!server.suspended)}
+              disabled={suspend.isPending}
+            >
+              {server.suspended ? "Unsuspend" : "Suspend"}
+            </button>
+          )}
           {canManage && (
             <button
               className="sp-btn sp-btn--danger"

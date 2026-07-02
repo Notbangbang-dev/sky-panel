@@ -1,5 +1,6 @@
 import { apiRequest } from "./api";
 import type {
+  AdminQuotaInfo,
   Allocation,
   AuditEntry,
   BackupEntry,
@@ -154,8 +155,12 @@ export const adminApi = {
   deleteUser: (userId: string) => apiRequest<void>(`/api/v1/admin/users/${userId}`, { method: "DELETE" }),
   adjustCoins: (userId: string, amount: number, note?: string) =>
     apiRequest<CoinResult>(`/api/v1/admin/users/${userId}/coins/adjust`, { method: "POST", body: { amount, note } }),
+  getUserQuota: (userId: string) => apiRequest<AdminQuotaInfo>(`/api/v1/admin/users/${userId}/quota`),
   setUserQuota: (userId: string, quota: { memory_bytes: number; cpu_percent: number; disk_bytes: number }) =>
-    apiRequest<QuotaInfo>(`/api/v1/admin/users/${userId}/quota`, { method: "PUT", body: quota }),
+    apiRequest<AdminQuotaInfo>(`/api/v1/admin/users/${userId}/quota`, { method: "PUT", body: quota }),
+
+  suspendServer: (id: string) => apiRequest<void>(`/api/v1/admin/servers/${id}/suspend`, { method: "POST" }),
+  unsuspendServer: (id: string) => apiRequest<void>(`/api/v1/admin/servers/${id}/unsuspend`, { method: "POST" }),
 
   listNodes: () => apiRequest<Node[]>("/api/v1/admin/nodes"),
   createNode: (name: string, address: string) =>

@@ -6,6 +6,8 @@ package coinsvc
 
 import (
 	"errors"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/models"
@@ -26,6 +28,16 @@ const (
 	DailyRewardInterval = 24 * time.Hour
 )
 
+// Setting keys that let an admin tune the economy at runtime (via the generic
+// settings store). Each falls back to the constant above when unset/invalid.
+const (
+	SettingAFKCoins           = "afk.coins_per_heartbeat"
+	SettingAFKMinSeconds      = "afk.min_interval_seconds"
+	SettingAFKMaxSeconds      = "afk.max_interval_seconds"
+	SettingDailyAmount        = "daily_reward.amount"
+	SettingDailyIntervalHours = "daily_reward.interval_hours"
+)
+
 var ErrDailyRewardAlreadyClaimed = errors.New("daily reward already claimed")
 
 // ErrAFKSessionElsewhere means another browser tab currently owns this user's
@@ -39,14 +51,15 @@ type Service struct {
 	Ledger       *repo.Ledger
 	AFK          *repo.AFKState
 	DailyRewards *repo.DailyRewards
+	Settings     *repo.Settings
 
 	// now is overridden in tests; production code leaves it nil and gets
 	// time.Now.
 	now func() time.Time
 }
 
-func NewService(users *repo.Users, ledger *repo.Ledger, afk *repo.AFKState, dailyRewards *repo.DailyRewards) *Service {
-	return &Service{Users: users, Ledger: ledger, AFK: afk, DailyRewards: dailyRewards}
+func NewService(users *repo.Users, ledger *repo.Ledger, afk *repo.AFKState, dailyRewards *repo.DailyRewards, settings *repo.Settings) *Service {
+	return &Service{Users: users, Ledger: ledger, AFK: afk, DailyRewards: dailyRewards, Settings: settings}
 }
 
 func (s *Service) clock() time.Time {
@@ -54,6 +67,39 @@ func (s *Service) clock() time.Time {
 		return s.now()
 	}
 	return time.Now().UTC()
+}
+
+// Runtime-tunable economy parameters, each falling back to its constant when
+// the corresponding setting is unset or invalid.
+func (s *Service) afkCoins() int64 { return s.settingInt64(SettingAFKCoins, AFKCoinsPerHeartbeat) }
+func (s *Service) afkMinInterval() time.Duration {
+	return s.settingSeconds(SettingAFKMinSeconds, AFKHeartbeatMinInterval)
+}
+func (s *Service) afkMaxInterval() time.Duration {
+	return s.settingSeconds(SettingAFKMaxSeconds, AFKHeartbeatMaxInterval)
+}
+func (s *Service) dailyAmount() int64 { return s.settingInt64(SettingDailyAmount, DailyRewardAmount) }
+func (s *Service) dailyInterval() time.Duration {
+	return time.Duration(s.settingInt64(SettingDailyIntervalHours, int64(DailyRewardInterval/time.Hour))) * time.Hour
+}
+
+func (s *Service) settingSeconds(key string, fallback time.Duration) time.Duration {
+	return time.Duration(s.settingInt64(key, int64(fallback/time.Second))) * time.Second
+}
+
+func (s *Service) settingInt64(key string, fallback int64) int64 {
+	if s.Settings == nil {
+		return fallback
+	}
+	v, found, err := s.Settings.Get(key)
+	if err != nil || !found {
+		return fallback
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
 }
 
 // HeartbeatResult is what a single AFK heartbeat produced.
@@ -81,8 +127,16 @@ func (s *Service) Heartbeat(userID, sessionID string) (HeartbeatResult, error) {
 		return HeartbeatResult{}, err
 	}
 
+	minInterval, maxInterval := s.afkMinInterval(), s.afkMaxInterval()
+	// Guard against a misconfigured window (min >= max) that would otherwise
+	// make the credit condition impossible and silently stop all earning —
+	// fall back to the built-in defaults instead.
+	if minInterval >= maxInterval {
+		minInterval, maxInterval = AFKHeartbeatMinInterval, AFKHeartbeatMaxInterval
+	}
+
 	// Is a session currently live (someone beat recently)?
-	sessionLive := found && prev.SessionID != "" && now.Sub(prev.LastHeartbeat) <= AFKHeartbeatMaxInterval
+	sessionLive := found && prev.SessionID != "" && now.Sub(prev.LastHeartbeat) <= maxInterval
 
 	if sessionLive && prev.SessionID != sessionID {
 		return HeartbeatResult{}, ErrAFKSessionElsewhere
@@ -94,8 +148,8 @@ func (s *Service) Heartbeat(userID, sessionID string) (HeartbeatResult, error) {
 	var credited int64
 	if continuing {
 		sessionStarted = prev.SessionStartedAt
-		if elapsed := now.Sub(prev.LastHeartbeat); elapsed >= AFKHeartbeatMinInterval && elapsed <= AFKHeartbeatMaxInterval {
-			credited = AFKCoinsPerHeartbeat
+		if elapsed := now.Sub(prev.LastHeartbeat); elapsed >= minInterval && elapsed <= maxInterval {
+			credited = s.afkCoins()
 		}
 	}
 
@@ -128,7 +182,7 @@ func (s *Service) ClaimDailyReward(userID string) (credited, balance int64, err 
 	if err != nil {
 		return 0, 0, err
 	}
-	if found && now.Sub(last) < DailyRewardInterval {
+	if found && now.Sub(last) < s.dailyInterval() {
 		return 0, 0, ErrDailyRewardAlreadyClaimed
 	}
 
@@ -136,11 +190,12 @@ func (s *Service) ClaimDailyReward(userID string) (credited, balance int64, err 
 		return 0, 0, err
 	}
 
-	balance, err = s.Ledger.AddEntry(userID, DailyRewardAmount, models.ReasonDailyReward, "")
+	amount := s.dailyAmount()
+	balance, err = s.Ledger.AddEntry(userID, amount, models.ReasonDailyReward, "")
 	if err != nil {
 		return 0, 0, err
 	}
-	return DailyRewardAmount, balance, nil
+	return amount, balance, nil
 }
 
 // AdminAdjust applies an arbitrary (positive or negative) coin adjustment,

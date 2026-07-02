@@ -31,8 +31,11 @@ type Server struct {
 	PrimaryPort         int
 	BackupIntervalHours int
 	LastBackupAt        *time.Time
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
+	// Suspended servers are stopped and their owner can't start or control
+	// them until an admin unsuspends. Admins are exempt from the block.
+	Suspended bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type Allocation struct {

@@ -60,7 +60,7 @@ func main() {
 		Quotas:        quotas,
 		ServerSvc:     serverSvc,
 		AgentHub:      agentHandler,
-		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards),
+		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards, settings),
 		QuotaSvc:      quotasvc.NewService(servers, quotas, settings),
 		StoreSvc:      storesvc.NewService(ledger, quotas),
 		Settings:      settings,

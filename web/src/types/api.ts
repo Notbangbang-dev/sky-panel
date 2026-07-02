@@ -78,6 +78,7 @@ export interface Server {
   variables: Record<string, string>;
   backup_interval_hours: number;
   last_backup_at?: string;
+  suspended: boolean;
 }
 
 export interface BackupEntry {
@@ -99,6 +100,10 @@ export interface QuotaUsage extends QuotaDims {
 export interface QuotaInfo {
   usage: QuotaUsage;
   limit: QuotaDims;
+}
+
+export interface AdminQuotaInfo extends QuotaInfo {
+  bonus: QuotaDims;
 }
 
 export type StoreDimension = "memory" | "cpu" | "disk";

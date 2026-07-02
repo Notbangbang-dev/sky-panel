@@ -39,7 +39,7 @@ func newTestServiceAndUser(t *testing.T) (*Service, *fakeClock, string) {
 		t.Fatalf("seed user: %v", err)
 	}
 
-	svc := NewService(users, repo.NewLedger(db), repo.NewAFKState(db), repo.NewDailyRewards(db))
+	svc := NewService(users, repo.NewLedger(db), repo.NewAFKState(db), repo.NewDailyRewards(db), repo.NewSettings(db))
 	clock := &fakeClock{t: now}
 	svc.now = clock.now
 
@@ -155,6 +155,59 @@ func TestHeartbeatRejectsSecondConcurrentTab(t *testing.T) {
 	}
 	if res.Credited != AFKCoinsPerHeartbeat {
 		t.Errorf("expected tab B to earn after takeover, got %d", res.Credited)
+	}
+}
+
+func TestEconomySettingsOverrideDefaults(t *testing.T) {
+	svc, clock, userID := newTestServiceAndUser(t)
+
+	// Admin bumps the AFK payout and the daily reward via settings.
+	if err := svc.Settings.Set(SettingAFKCoins, "5"); err != nil {
+		t.Fatalf("set afk coins: %v", err)
+	}
+	if err := svc.Settings.Set(SettingDailyAmount, "250"); err != nil {
+		t.Fatalf("set daily amount: %v", err)
+	}
+
+	svc.Heartbeat(userID, testSession)
+	clock.advance(30 * time.Second)
+	res, err := svc.Heartbeat(userID, testSession)
+	if err != nil {
+		t.Fatalf("Heartbeat: %v", err)
+	}
+	if res.Credited != 5 {
+		t.Errorf("expected configured 5 coins per heartbeat, got %d", res.Credited)
+	}
+
+	credited, _, err := svc.ClaimDailyReward(userID)
+	if err != nil {
+		t.Fatalf("ClaimDailyReward: %v", err)
+	}
+	if credited != 250 {
+		t.Errorf("expected configured daily reward 250, got %d", credited)
+	}
+}
+
+func TestHeartbeatSurvivesInvalidIntervalConfig(t *testing.T) {
+	svc, clock, userID := newTestServiceAndUser(t)
+
+	// A nonsensical config (min >= max) must not silently stop earning — the
+	// service falls back to the defaults.
+	if err := svc.Settings.Set(SettingAFKMinSeconds, "900"); err != nil {
+		t.Fatalf("set min: %v", err)
+	}
+	if err := svc.Settings.Set(SettingAFKMaxSeconds, "90"); err != nil {
+		t.Fatalf("set max: %v", err)
+	}
+
+	svc.Heartbeat(userID, testSession)
+	clock.advance(30 * time.Second)
+	res, err := svc.Heartbeat(userID, testSession)
+	if err != nil {
+		t.Fatalf("Heartbeat: %v", err)
+	}
+	if res.Credited != AFKCoinsPerHeartbeat {
+		t.Errorf("expected earning to keep working under a bad interval config, got %d", res.Credited)
 	}
 }
 

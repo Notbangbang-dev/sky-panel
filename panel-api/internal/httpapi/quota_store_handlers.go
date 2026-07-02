@@ -96,6 +96,48 @@ func (d Deps) PurchaseStoreItem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, purchaseResponse{ItemID: item.ID, Balance: balance})
 }
 
+type adminQuotaResponse struct {
+	Usage quotasvc.Usage    `json:"usage"`
+	Limit quotasvc.Quota    `json:"limit"`
+	Bonus adminQuotaRequest `json:"bonus"`
+}
+
+// AdminGetUserQuota reports a user's usage, effective limit, and the bonus
+// (over the global default) the admin has granted — so the console can show
+// current values and pre-fill the editor.
+func (d Deps) AdminGetUserQuota(w http.ResponseWriter, r *http.Request) {
+	userID := pathParam(r, "userID")
+	if _, err := d.Users.GetByID(userID); errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "user not found")
+		return
+	}
+	d.writeAdminQuota(w, userID)
+}
+
+// writeAdminQuota writes the full {usage, limit, bonus} shape the admin
+// console expects, shared by the GET and PUT quota handlers.
+func (d Deps) writeAdminQuota(w http.ResponseWriter, userID string) {
+	usage, err := d.QuotaSvc.Usage(userID, "")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to compute usage")
+		return
+	}
+	limit, err := d.QuotaSvc.Effective(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load quota")
+		return
+	}
+	bonus, err := d.Quotas.Get(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load bonus")
+		return
+	}
+	writeJSON(w, http.StatusOK, adminQuotaResponse{
+		Usage: usage, Limit: limit,
+		Bonus: adminQuotaRequest{MemoryBytes: bonus.MemoryBytes, CPUPercent: bonus.CPUPercent, DiskBytes: bonus.DiskBytes},
+	})
+}
+
 type adminQuotaRequest struct {
 	MemoryBytes int64 `json:"memory_bytes"`
 	CPUPercent  int   `json:"cpu_percent"`
@@ -121,5 +163,5 @@ func (d Deps) AdminSetUserQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.audit(r, "user.quota.set", userID, "")
-	d.writeQuotaFor(w, userID)
+	d.writeAdminQuota(w, userID)
 }

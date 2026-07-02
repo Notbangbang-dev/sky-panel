@@ -92,9 +92,15 @@ func NewRouter(d Deps) http.Handler {
 				r.Route("/admin/users", func(r chi.Router) {
 					r.Get("/", d.AdminListUsers)
 					r.Post("/{userID}/coins/adjust", d.AdminAdjustCoins)
+					r.Get("/{userID}/quota", d.AdminGetUserQuota)
 					r.Put("/{userID}/quota", d.AdminSetUserQuota)
 					r.Post("/{userID}/role", d.AdminSetUserRole)
 					r.Delete("/{userID}", d.AdminDeleteUser)
+				})
+
+				r.Route("/admin/servers", func(r chi.Router) {
+					r.Post("/{serverID}/suspend", d.AdminSuspendServer)
+					r.Post("/{serverID}/unsuspend", d.AdminUnsuspendServer)
 				})
 
 				r.Route("/admin/nodes", func(r chi.Router) {

@@ -147,6 +147,31 @@ func (s *Service) ReinstallServer(serverID string) error {
 	return s.Servers.SetStatus(serverID, models.StatusRunning)
 }
 
+// SuspendServer flags a server as suspended and stops its container. The stop
+// is best-effort (the node may be offline); the flag is what actually blocks
+// the owner from starting it again.
+func (s *Service) SuspendServer(serverID string) error {
+	server, err := s.Servers.GetByID(serverID)
+	if err != nil {
+		return fmt.Errorf("load server: %w", err)
+	}
+	if err := s.Servers.SetSuspended(serverID, true); err != nil {
+		return err
+	}
+	_, _ = s.dispatch(server.NodeID, agenthub.ActionStop, serverID, nil)
+	_ = s.Servers.SetStatus(serverID, models.StatusOffline)
+	return nil
+}
+
+// UnsuspendServer clears the suspension flag, letting the owner control the
+// server again. It does not auto-start it.
+func (s *Service) UnsuspendServer(serverID string) error {
+	if _, err := s.Servers.GetByID(serverID); err != nil {
+		return fmt.Errorf("load server: %w", err)
+	}
+	return s.Servers.SetSuspended(serverID, false)
+}
+
 // provision builds the container spec for a server and dispatches
 // create + start to its node.
 func (s *Service) provision(server *models.Server, egg *models.Egg) error {

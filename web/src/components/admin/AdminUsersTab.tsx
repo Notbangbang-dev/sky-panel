@@ -1,7 +1,7 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "../../lib/endpoints";
-import { bytesPerMB } from "../../lib/format";
+import { bytesPerMB, formatBytes } from "../../lib/format";
 
 interface QuotaDraft {
   memoryMb: string;
@@ -21,6 +21,23 @@ export function AdminUsersTab() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
 
+  // Current quota for the expanded user — used to show usage/limit and to
+  // pre-fill the bonus editor with what's already granted.
+  const { data: quota } = useQuery({
+    queryKey: ["admin", "quota", quotaOpen],
+    queryFn: () => adminApi.getUserQuota(quotaOpen!),
+    enabled: !!quotaOpen,
+  });
+
+  useEffect(() => {
+    if (!quota) return;
+    setQuotaDraft({
+      memoryMb: String(Math.round(quota.bonus.memory_bytes / bytesPerMB)),
+      cpuPercent: String(quota.bonus.cpu_percent),
+      diskMb: String(Math.round(quota.bonus.disk_bytes / bytesPerMB)),
+    });
+  }, [quota]);
+
   const setRole = useMutation({
     mutationFn: ({ id, role }: { id: string; role: "admin" | "user" }) => adminApi.setUserRole(id, role),
     onSuccess: invalidate,
@@ -37,7 +54,10 @@ export function AdminUsersTab() {
         cpu_percent: Number(draft.cpuPercent || 0),
         disk_bytes: Number(draft.diskMb || 0) * bytesPerMB,
       }),
-    onSuccess: () => setQuotaMsg("Bonus quota saved."),
+    onSuccess: (_data, { id }) => {
+      setQuotaMsg("Bonus quota saved.");
+      queryClient.invalidateQueries({ queryKey: ["admin", "quota", id] });
+    },
     onError: () => setQuotaMsg("Failed to save quota."),
   });
 
@@ -102,6 +122,13 @@ export function AdminUsersTab() {
             {quotaOpen === u.id && (
               <tr>
                 <td colSpan={5} style={{ background: "var(--sp-bg-alt)" }}>
+                  {quota && (
+                    <p className="sp-mono" style={{ fontSize: 12, color: "var(--sp-text-muted)", marginTop: 0 }}>
+                      In use: {formatBytes(quota.usage.memory_bytes)} RAM · {quota.usage.cpu_percent}% CPU ·{" "}
+                      {formatBytes(quota.usage.disk_bytes)} disk &nbsp;/&nbsp; limit {formatBytes(quota.limit.memory_bytes)} ·{" "}
+                      {quota.limit.cpu_percent}% · {formatBytes(quota.limit.disk_bytes)}
+                    </p>
+                  )}
                   <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
                     <QuotaInput
                       label="Bonus RAM (MB)"

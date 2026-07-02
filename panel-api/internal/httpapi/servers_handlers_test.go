@@ -67,7 +67,7 @@ func newFullTestRouter(t *testing.T) (http.Handler, *repo.Allocations) {
 		Quotas:        quotas,
 		ServerSvc:     serversvc.NewService(servers, eggs, nodes, allocations, registry),
 		AgentHub:      agentHandler,
-		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards),
+		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards, settings),
 		QuotaSvc:      quotasvc.NewService(servers, quotas, settings),
 		StoreSvc:      storesvc.NewService(ledger, quotas),
 		Settings:      settings,
@@ -229,17 +229,26 @@ func authedRequest(t *testing.T, r http.Handler, method, path, accessToken strin
 	return rec
 }
 
-// waitForNodeConnected polls until the admin nodes list is non-empty, purely
-// to give the background fake-agent goroutine time to complete its hello
-// handshake before the test proceeds.
+// waitForNodeConnected polls the node list until the node actually reports
+// connected — i.e. the fake agent's hello handshake has registered. Waiting on
+// the real connection state (not just the node's existence) keeps tests that
+// then create servers deterministic even under CPU load.
 func waitForNodeConnected(t *testing.T, r http.Handler, adminAccess, nodeID string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		rec := authedRequest(t, r, http.MethodGet, "/api/v1/admin/nodes", adminAccess)
-		if rec.Code == http.StatusOK && strings.Contains(rec.Body.String(), nodeID) {
-			return
+		rec := authedRequest(t, r, http.MethodGet, "/api/v1/nodes", adminAccess)
+		if rec.Code == http.StatusOK {
+			var summaries []nodeSummary
+			if json.Unmarshal(rec.Body.Bytes(), &summaries) == nil {
+				for _, s := range summaries {
+					if s.ID == nodeID && s.Connected {
+						return
+					}
+				}
+			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+	t.Fatalf("node %s did not report connected within the deadline", nodeID)
 }

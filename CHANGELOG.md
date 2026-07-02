@@ -2,6 +2,23 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.0] - 2026-07-01
+
+### ✨ New Features
+
+- **Editable economy (admin → Economy tab)** — tune how the AFK page and daily reward pay out without redeploying: coins per AFK tick, the min/max tick window, the daily reward amount, and its cooldown. Changes take effect immediately; each value falls back to a sensible default if unset.
+- **Per-user coins & quota in the admin console** — the admin Users tab now shows each user's live resource usage against their limit, and the quota editor pre-fills the current bonus so you can see and adjust a user's RAM, CPU, and disk (on top of the global default) — alongside the existing coin adjustment.
+- **Server suspension** — admins can suspend a server from its page: it's stopped, and its owner can't start it, use its console, save settings, or reinstall until an admin unsuspends it. Suspended servers show a clear badge in the list and on the server page. (A classic control from panels like cloudpanel/Pterodactyl.)
+
+### 🛠 Fixes
+
+- A misconfigured AFK tick window (min ≥ max) no longer silently stops all earning — the service falls back to the defaults.
+- Suspension can't be bypassed via the settings-save or reinstall paths (both re-provision and would otherwise restart the container).
+
+### 🔗 Requires
+
+- Panel-only release — works with sky-daemon v0.2.0.
+
 ## [0.7.0] - 2026-07-01
 
 ### ✨ New Features
