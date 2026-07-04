@@ -108,6 +108,25 @@ func (d Deps) CreateServer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, toServerResponse(server))
 }
 
+// ServerStats returns the most recent live stats the panel has received for a
+// server (cached from the node's heartbeats), so the UI shows numbers on page
+// load and after a brief WebSocket gap instead of a dash. 204 when there's no
+// fresh sample (server stopped, or the node hasn't reported yet).
+func (d Deps) ServerStats(w http.ResponseWriter, r *http.Request) {
+	server := d.loadServerWithPermission(w, r, "")
+	if server == nil {
+		return
+	}
+	msg, ok := d.AgentHub.LatestStats(server.ID)
+	if !ok {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(msg)
+}
+
 func (d Deps) ListServers(w http.ResponseWriter, r *http.Request) {
 	claims, ok := auth.FromContext(r.Context())
 	if !ok {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminApi, nodesApi, serversApi } from "../lib/endpoints";
@@ -56,18 +56,44 @@ export function ServerDetailPage() {
   // Rolling window of recent CPU% / memory% samples for the live sparklines.
   const [history, setHistory] = useState<{ cpu: number; mem: number }[]>([]);
   const [copied, setCopied] = useState(false);
+  // When the last live WS heartbeat arrived, so the HTTP poll below only steps
+  // in when the socket has gone quiet (avoids double-counting into history).
+  const lastWsAt = useRef(0);
 
-  useTopic<ConsoleLine>(id ? `server:${id}:console` : null, (msg) => {
-    setLines((prev) => [...prev, msg.message]);
-  });
-  useTopic<ContainerHeartbeat>(id ? `server:${id}:stats` : null, (msg) => {
+  const applyStats = useCallback((msg: ContainerHeartbeat) => {
     setStats(msg);
     setHistory((prev) => {
       const memPct = msg.mem_limit_bytes > 0 ? (msg.mem_used_bytes / msg.mem_limit_bytes) * 100 : 0;
       const next = [...prev, { cpu: msg.cpu_percent, mem: memPct }];
       return next.length > 60 ? next.slice(next.length - 60) : next;
     });
+  }, []);
+
+  useTopic<ConsoleLine>(id ? `server:${id}:console` : null, (msg) => {
+    setLines((prev) => [...prev, msg.message]);
   });
+  useTopic<ContainerHeartbeat>(id ? `server:${id}:stats` : null, (msg) => {
+    lastWsAt.current = Date.now();
+    applyStats(msg);
+  });
+
+  // Fallback: fetch the panel's last cached stats over HTTP. This fills the
+  // cards on page load (before the first WS push) and keeps them live if the
+  // WebSocket never connects or drops — as long as the node is reporting to the
+  // panel at all. Skipped while the WS is actively delivering.
+  const { data: polledStats } = useQuery({
+    queryKey: ["server-stats", id],
+    queryFn: () => serversApi.stats(id!),
+    enabled: !!id,
+    // Poll only while the server is running; a stopped server just 204s forever.
+    refetchInterval: server?.status === "running" ? 5000 : false,
+    refetchOnWindowFocus: false,
+  });
+  useEffect(() => {
+    if (polledStats && Date.now() - lastWsAt.current > 6000) {
+      applyStats(polledStats);
+    }
+  }, [polledStats, applyStats]);
 
   const power = useMutation({
     mutationFn: (action: "start" | "stop" | "kill") => serversApi.power(id!, action),

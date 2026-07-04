@@ -10,6 +10,7 @@ import type {
   AuditEntry,
   BackupEntry,
   CoinResult,
+  ContainerHeartbeat,
   CreateNodeResult,
   Egg,
   EggVariable,
@@ -136,6 +137,12 @@ export const serversApi = {
     apiRequest<void>(`/api/v1/servers/${id}/power`, { method: "POST", body: { action } }),
   consoleInput: (id: string, input: string) =>
     apiRequest<void>(`/api/v1/servers/${id}/console`, { method: "POST", body: { input } }),
+  // Latest cached stats (204 -> null) — a fallback so the cards fill on page
+  // load and survive a brief WebSocket gap instead of showing a dash. The
+  // `?? null` matters: a 204 makes apiRequest resolve to undefined, and
+  // TanStack Query rejects a query that resolves to undefined.
+  stats: (id: string) =>
+    apiRequest<ContainerHeartbeat | null>(`/api/v1/servers/${id}/stats`).then((v) => v ?? null),
   setDescription: (id: string, description: string) =>
     apiRequest<void>(`/api/v1/servers/${id}/description`, { method: "PUT", body: { description } }),
   clone: (id: string) => apiRequest<Server>(`/api/v1/servers/${id}/clone`, { method: "POST" }),

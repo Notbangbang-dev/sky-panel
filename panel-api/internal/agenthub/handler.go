@@ -56,6 +56,7 @@ type Handler struct {
 	Registry *Registry
 	Nodes    NodeLookup
 	Sink     EventSink
+	stats    *statsCache
 	// OnNodeConnected, if set, is invoked (in its own goroutine) each time a
 	// node finishes its hello handshake — used to warm the node's image cache.
 	// Optional so the handler stays testable without pulling in serversvc.
@@ -63,7 +64,15 @@ type Handler struct {
 }
 
 func NewHandler(registry *Registry, nodes NodeLookup, sink EventSink) *Handler {
-	return &Handler{Registry: registry, Nodes: nodes, Sink: sink}
+	stats := newStatsCache()
+	go stats.sweepLoop()
+	return &Handler{Registry: registry, Nodes: nodes, Sink: sink, stats: stats}
+}
+
+// LatestStats returns the most recent (and still fresh) heartbeat JSON for a
+// server, so an HTTP caller can seed the UI without waiting for a WS push.
+func (h *Handler) LatestStats(serverID string) ([]byte, bool) {
+	return h.stats.get(serverID)
 }
 
 // ServeWS accepts a node's inbound connection. The HTTP layer itself
@@ -155,7 +164,9 @@ func (h *Handler) readLoop(conn *Conn, ws *websocket.Conn, secret []byte) {
 
 		case TypeHeartbeat:
 			var hb HeartbeatPayload
-			if json.Unmarshal(env.Payload, &hb) == nil {
+			if err := json.Unmarshal(env.Payload, &hb); err != nil {
+				log.Printf("agenthub: node %s sent an undecodable heartbeat: %v", conn.NodeID, err)
+			} else {
 				h.forwardHeartbeat(hb)
 			}
 
@@ -170,9 +181,16 @@ func (h *Handler) readLoop(conn *Conn, ws *websocket.Conn, secret []byte) {
 
 func (h *Handler) forwardHeartbeat(hb HeartbeatPayload) {
 	for _, c := range hb.Containers {
+		if c.ServerID == "" {
+			// Would publish to "server::stats", which no client subscribes to.
+			continue
+		}
 		msg, err := json.Marshal(c)
 		if err != nil {
 			continue
+		}
+		if h.stats != nil {
+			h.stats.put(c.ServerID, msg)
 		}
 		h.Sink.Broadcast("server:"+c.ServerID+":stats", msg)
 	}

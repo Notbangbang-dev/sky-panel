@@ -2,6 +2,20 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.19.0] - 2026-07-04
+
+### 🛠 Fixes
+
+- **Live stats now show reliably.** The server page's CPU / Memory / Network cards only ever filled from a live WebSocket push, so they sat on a dash on first load, after a reconnect, or if the socket didn't establish. The panel now **caches each server's latest heartbeat** and serves it over a new `GET /servers/{id}/stats` endpoint, and the page **polls it as a fallback** — so the cards fill on load and stay live as long as the node is reporting at all, WebSocket or not. Paired with **sky-daemon v0.4.6**, which recovers a running server's tracking after a daemon restart by matching the `sky-<id>` container name (not just the label), so an older container's stats come back on their own.
+
+### 🔒 Hardening & observability
+
+- The panel now **logs** an undecodable heartbeat from a node instead of silently dropping it, and **skips** a heartbeat with an empty server id (which would publish to a dead topic).
+
+### 🔗 Requires
+
+- Best paired with **sky-daemon v0.4.6** for the stats-after-restart recovery (older daemons still work; live stats just rely on tracking established at create/start time).
+
 ## [0.18.0] - 2026-07-04
 
 ### ✨ New Features

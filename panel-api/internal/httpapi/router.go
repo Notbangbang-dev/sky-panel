@@ -77,6 +77,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Delete("/{serverID}/favorite", d.UnfavoriteServer)
 				r.Put("/{serverID}/description", d.SetServerDescription)
 				r.Post("/{serverID}/console", d.ConsoleInput)
+				r.Get("/{serverID}/stats", d.ServerStats)
 				r.Get("/{serverID}/activity", d.ServerActivity)
 
 				r.Get("/{serverID}/backups", d.ListBackups)

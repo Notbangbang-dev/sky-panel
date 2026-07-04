@@ -237,6 +237,15 @@ func TestHandlerForwardsHeartbeatToSink(t *testing.T) {
 	waitForCondition(t, func() bool {
 		return len(sink.get("server:server-1:stats")) > 0
 	})
+
+	// The heartbeat is also cached for the HTTP stats fallback.
+	waitForCondition(t, func() bool {
+		_, ok := h.LatestStats("server-1")
+		return ok
+	})
+	if _, ok := h.LatestStats("server-2"); ok {
+		t.Errorf("did not expect cached stats for an unseen server")
+	}
 }
 
 func sendHello(t *testing.T, conn *websocket.Conn, token string) {
