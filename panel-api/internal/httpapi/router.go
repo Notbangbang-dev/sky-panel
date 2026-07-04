@@ -55,6 +55,8 @@ func NewRouter(d Deps) http.Handler {
 			r.Post("/me/totp/disable", d.TOTPDisable)
 
 			r.Get("/leaderboard", d.Leaderboard)
+			r.Get("/achievements", d.Achievements)
+			r.Get("/me/favorites", d.ListFavorites)
 
 			r.Route("/servers", func(r chi.Router) {
 				r.Get("/", d.ListServers)
@@ -64,6 +66,9 @@ func NewRouter(d Deps) http.Handler {
 				r.Delete("/{serverID}", d.DeleteServer)
 				r.Post("/{serverID}/power", d.PowerAction)
 				r.Post("/{serverID}/reinstall", d.ReinstallServer)
+				r.Post("/{serverID}/clone", d.CloneServer)
+				r.Post("/{serverID}/favorite", d.FavoriteServer)
+				r.Delete("/{serverID}/favorite", d.UnfavoriteServer)
 				r.Put("/{serverID}/description", d.SetServerDescription)
 				r.Post("/{serverID}/console", d.ConsoleInput)
 				r.Get("/{serverID}/activity", d.ServerActivity)
@@ -142,6 +147,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Route("/admin/eggs", func(r chi.Router) {
 					r.Post("/", d.CreateEgg)
 					r.Put("/{eggID}", d.UpdateEgg)
+					r.Get("/{eggID}/export", d.ExportEgg)
 					r.Delete("/{eggID}", d.DeleteEgg)
 				})
 

@@ -25,6 +25,23 @@ func Open(path string) (*sql.DB, error) {
 		dsn = "file::memory:?cache=shared"
 	}
 
+	// foreign_keys and busy_timeout are PER-CONNECTION settings in SQLite, and
+	// database/sql keeps a pool of connections. A one-shot `PRAGMA foreign_keys
+	// = ON` only configures whichever single connection ran it, leaving every
+	// other pooled connection with FKs OFF — so ON DELETE CASCADE would fire
+	// only intermittently. modernc.org/sqlite instead applies `_pragma=` DSN
+	// params to every connection it opens, so we set them there. busy_timeout
+	// makes a writer wait for a held lock rather than failing immediately with
+	// SQLITE_BUSY under concurrent provisioning.
+	if !strings.HasPrefix(dsn, "file:") {
+		dsn = "file:" + dsn
+	}
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	dsn += sep + "_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -32,10 +49,6 @@ func Open(path string) (*sql.DB, error) {
 
 	if strings.Contains(dsn, "memory") {
 		db.SetMaxOpenConns(1)
-	}
-
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 
 	if err := migrate(db); err != nil {

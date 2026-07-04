@@ -121,6 +121,30 @@ func (d Deps) UpdateEgg(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toEggResponse(existing))
 }
 
+// ExportEgg returns an egg as a portable JSON definition (no id/timestamps),
+// in the exact shape CreateEgg/import accepts, so eggs can be shared between
+// installs.
+func (d Deps) ExportEgg(w http.ResponseWriter, r *http.Request) {
+	egg, err := d.Eggs.GetByID(pathParam(r, "eggID"))
+	if errors.Is(err, repo.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "not_found", "egg not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load egg")
+		return
+	}
+	writeJSON(w, http.StatusOK, createEggRequest{
+		Name:        egg.Name,
+		Category:    egg.Category,
+		Description: egg.Description,
+		DockerImage: egg.DockerImage,
+		Startup:     egg.Startup,
+		StopCommand: egg.StopCommand,
+		Variables:   egg.Variables,
+	})
+}
+
 func (d Deps) DeleteEgg(w http.ResponseWriter, r *http.Request) {
 	eggID := pathParam(r, "eggID")
 	if err := d.Eggs.Delete(eggID); err != nil {

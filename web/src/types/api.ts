@@ -211,6 +211,13 @@ export interface LeaderboardEntry {
   coins: number;
 }
 
+export interface Achievement {
+  id: string;
+  name: string;
+  description: string;
+  unlocked: boolean;
+}
+
 export const PERMISSIONS = ["console", "files", "power", "settings"] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 

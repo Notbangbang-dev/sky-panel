@@ -2,6 +2,33 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.17.0] - 2026-07-04
+
+### ✨ New Features
+
+Five more from the cloud-panel playbook:
+
+- **Favorite / pin servers.** Star any server on the Servers list; favorites sort to the top and the star toggles instantly (optimistic, with rollback on error).
+- **Clone a server.** One click duplicates a server's egg, node, resource limits, and variables into a fresh server ("Copy of …"). Configuration only — files aren't copied — and it counts against your quota like any other create.
+- **Egg import / export (admin).** Export any egg to a portable `.egg.json` file and import one back into the create form to share egg definitions between installs.
+- **Live metrics graphs.** The server page now draws rolling CPU% and memory% sparklines from the live stats stream, above the existing gauges.
+- **Achievements.** A new Achievements page derives milestones (first deploy, fleet commander, coin hoarder, 2FA, gifting, redeeming) from your live state — no separate award pipeline.
+
+### 🔒 Security &amp; hardening
+
+An adversarial audit of this release turned up and fixed:
+
+- **Server-create quota was bypassable under concurrency (TOCTOU).** The quota check and the row insert are now serialized per user, so a burst of concurrent create/clone requests can't each pass against the same pre-insert snapshot and overshoot the limit.
+- **`ON DELETE CASCADE` wasn't reliably enforced.** SQLite's `foreign_keys` is per-connection, but it was only set once on a single pooled connection — so cascades (favorites, redemptions, ledger) fired only intermittently in production. It's now set on every connection via the DSN, alongside a `busy_timeout` that stops concurrent provisioning from failing with spurious `SQLITE_BUSY`.
+- **Orphaned port/row leak.** A server-create that failed right after claiming a port now releases the allocation and deletes the placeholder row instead of leaking both.
+- **Missing index** on `redeem_code_redemptions(user_id)` (added for achievements) that would have full-scanned — now indexed like every other per-user lookup.
+- **Clone name truncation** now cuts on a rune boundary, not a byte boundary, so a long multibyte name can't be stored as invalid UTF-8.
+- **Server page state** now fully resets when switching between servers, so one server's console/metrics can never bleed into another's view.
+
+### 🔗 Requires
+
+- Panel-only release — works with sky-daemon v0.4.x.
+
 ## [0.16.0] - 2026-07-02
 
 ### ✨ New Features

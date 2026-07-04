@@ -103,6 +103,12 @@ func (s *Service) CreateServer(ownerID, nodeID, eggID, name string, memoryBytes 
 		return nil, fmt.Errorf("claim allocation: %w", err)
 	}
 	if err := s.Servers.SetPrimaryPort(serverID, port); err != nil {
+		// Mirror the ClaimFree failure cleanup above: release the port back to
+		// the pool and drop the orphaned server row, otherwise the allocation
+		// stays permanently claimed by a row that will never come online (and
+		// that row still counts against the owner's quota).
+		_ = s.Allocations.ReleaseByServerID(serverID)
+		_ = s.Servers.Delete(serverID)
 		return nil, fmt.Errorf("persist allocated port: %w", err)
 	}
 	server.PrimaryPort = port

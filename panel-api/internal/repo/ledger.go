@@ -136,6 +136,20 @@ func (r *Ledger) Transfer(fromUserID, toUserID string, amount int64, reasonFrom,
 	return fromBalance, tx.Commit()
 }
 
+// HasReason reports whether a user has at least one ledger entry with the given
+// reason — used to derive achievements (e.g. "has sent a gift").
+func (r *Ledger) HasReason(userID, reason string) (bool, error) {
+	var one int
+	err := r.db.QueryRow(`SELECT 1 FROM ledger_entries WHERE user_id = ? AND reason = ? LIMIT 1`, userID, reason).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (r *Ledger) ListByUser(userID string, limit int) ([]*models.LedgerEntry, error) {
 	rows, err := r.db.Query(
 		`SELECT id, user_id, amount, reason, metadata, created_at FROM ledger_entries

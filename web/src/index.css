@@ -517,10 +517,131 @@ button {
   font-size: 12px;
 }
 
+.sp-btn--ghost {
+  background: transparent;
+  border-color: var(--sp-surface-border);
+  color: var(--sp-text-muted);
+}
+
+.sp-btn--ghost:hover {
+  color: var(--sp-text);
+  border-color: color-mix(in srgb, var(--sp-accent) 55%, var(--sp-surface-border));
+}
+
+/* Favorite star toggle — a bare glyph button that lights up when active. */
+.sp-star {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 4px;
+  color: var(--sp-text-muted);
+  opacity: 0.55;
+  transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.sp-star:hover {
+  opacity: 1;
+  transform: scale(1.12);
+}
+
+.sp-star[data-on] {
+  color: var(--sp-accent);
+  opacity: 1;
+}
+
 .sp-error {
   color: #ff9b9b;
   font-size: 13px;
   margin: 8px 0;
+}
+
+/* ---------- Achievements ---------- */
+
+.sp-ach-track {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sp-surface-border) 60%, transparent);
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+
+.sp-ach-track__fill {
+  height: 100%;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--sp-accent) 55%, transparent), var(--sp-accent));
+}
+
+.sp-ach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.sp-ach-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  position: relative;
+  opacity: 0.6;
+  filter: grayscale(1);
+  transition: opacity 0.2s ease, filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sp-ach-card[data-unlocked] {
+  opacity: 1;
+  filter: none;
+}
+
+.sp-ach-card[data-unlocked]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px -18px color-mix(in srgb, var(--sp-accent) 70%, transparent);
+}
+
+.sp-ach-card__emblem {
+  font-size: 26px;
+  line-height: 1;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--sp-surface-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sp-accent) 6%, transparent);
+}
+
+.sp-ach-card[data-unlocked] .sp-ach-card__emblem {
+  border-color: color-mix(in srgb, var(--sp-accent) 45%, var(--sp-surface-border));
+  color: var(--sp-accent);
+}
+
+.sp-ach-card__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-ach-card__name {
+  font-weight: 600;
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+
+.sp-ach-card__desc {
+  font-size: 12.5px;
+  color: var(--sp-text-muted);
+}
+
+.sp-ach-card__state {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--sp-text-muted);
+  align-self: flex-start;
+}
+
+.sp-ach-card[data-unlocked] .sp-ach-card__state {
+  color: var(--sp-accent);
 }
 
 /* ---------- Cards ---------- */

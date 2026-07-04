@@ -44,6 +44,7 @@ func main() {
 	apiKeys := repo.NewAPIKeys(db)
 	schedules := repo.NewSchedules(db)
 	redeemCodes := repo.NewRedeemCodes(db)
+	favorites := repo.NewFavorites(db)
 	settings := repo.NewSettings(db)
 	auditLog := repo.NewAudit(db)
 
@@ -68,6 +69,7 @@ func main() {
 		Quotas:        quotas,
 		Schedules:     schedules,
 		RedeemCodes:   redeemCodes,
+		Favorites:     favorites,
 		ServerSvc:     serverSvc,
 		AgentHub:      agentHandler,
 		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards, settings),

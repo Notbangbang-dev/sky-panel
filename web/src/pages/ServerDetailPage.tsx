@@ -52,12 +52,21 @@ export function ServerDetailPage() {
 
   const [lines, setLines] = useState<string[]>([]);
   const [stats, setStats] = useState<ContainerHeartbeat | null>(null);
+  // Rolling window of recent CPU% / memory% samples for the live sparklines.
+  const [history, setHistory] = useState<{ cpu: number; mem: number }[]>([]);
   const [copied, setCopied] = useState(false);
 
   useTopic<ConsoleLine>(id ? `server:${id}:console` : null, (msg) => {
     setLines((prev) => [...prev, msg.message]);
   });
-  useTopic<ContainerHeartbeat>(id ? `server:${id}:stats` : null, (msg) => setStats(msg));
+  useTopic<ContainerHeartbeat>(id ? `server:${id}:stats` : null, (msg) => {
+    setStats(msg);
+    setHistory((prev) => {
+      const memPct = msg.mem_limit_bytes > 0 ? (msg.mem_used_bytes / msg.mem_limit_bytes) * 100 : 0;
+      const next = [...prev, { cpu: msg.cpu_percent, mem: memPct }];
+      return next.length > 60 ? next.slice(next.length - 60) : next;
+    });
+  });
 
   const power = useMutation({
     mutationFn: (action: "start" | "stop" | "kill") => serversApi.power(id!, action),
@@ -250,12 +259,14 @@ export function ServerDetailPage() {
           label="CPU"
           value={stats ? `${stats.cpu_percent.toFixed(1)}%` : "—"}
           pct={stats && server.cpu_limit > 0 ? (stats.cpu_percent / server.cpu_limit) * 100 : stats?.cpu_percent}
+          series={history.map((h) => h.cpu)}
         />
         <StatCard
           label="Memory"
           value={stats ? `${(stats.mem_used_bytes / 1024 / 1024).toFixed(0)}MB` : "—"}
           sub={stats ? `of ${formatBytes(stats.mem_limit_bytes || server.memory_bytes)}` : undefined}
           pct={stats && stats.mem_limit_bytes > 0 ? (stats.mem_used_bytes / stats.mem_limit_bytes) * 100 : undefined}
+          series={history.map((h) => h.mem)}
         />
         <StatCard label="Net RX" value={stats ? `${(stats.net_rx_bytes / 1024).toFixed(1)}KB` : "—"} />
         <StatCard label="Net TX" value={stats ? `${(stats.net_tx_bytes / 1024).toFixed(1)}KB` : "—"} />
@@ -300,7 +311,19 @@ export function ServerDetailPage() {
   );
 }
 
-function StatCard({ label, value, sub, pct }: { label: string; value: string; sub?: string; pct?: number }) {
+function StatCard({
+  label,
+  value,
+  sub,
+  pct,
+  series,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  pct?: number;
+  series?: number[];
+}) {
   const clamped = pct === undefined ? undefined : Math.max(0, Math.min(100, pct));
   return (
     <div className="sp-surface sp-card">
@@ -313,11 +336,38 @@ function StatCard({ label, value, sub, pct }: { label: string; value: string; su
           {sub}
         </p>
       )}
+      {series && series.length >= 2 && <Sparkline series={series} warn={clamped !== undefined && clamped >= 90} />}
       {clamped !== undefined && (
         <div className="sp-gauge">
           <div className={"sp-gauge__fill" + (clamped >= 90 ? " sp-gauge__fill--warn" : "")} style={{ width: `${clamped}%` }} />
         </div>
       )}
     </div>
+  );
+}
+
+// Sparkline renders a compact history line for a metric, auto-scaled to the
+// series' own peak so a low-but-varying signal is still readable. Purely an
+// SVG polyline + a soft area fill under it — no chart library.
+function Sparkline({ series, warn }: { series: number[]; warn?: boolean }) {
+  const w = 120;
+  const h = 30;
+  const max = Math.max(1, ...series);
+  const step = series.length > 1 ? w / (series.length - 1) : w;
+  const pts = series.map((v, i) => [i * step, h - (v / max) * (h - 2) - 1] as const);
+  const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const area = `0,${h} ${line} ${w},${h}`;
+  const stroke = warn ? "var(--sp-gauge-warn, #ff9b9b)" : "var(--sp-accent)";
+  return (
+    <svg
+      className="sp-spark"
+      viewBox={`0 0 ${w} ${h}`}
+      preserveAspectRatio="none"
+      style={{ width: "100%", height: 30, marginTop: 10, display: "block" }}
+      aria-hidden
+    >
+      <polygon points={area} fill={stroke} opacity={0.12} />
+      <polyline points={line} fill="none" stroke={stroke} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
   );
 }

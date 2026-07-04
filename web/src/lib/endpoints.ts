@@ -1,5 +1,6 @@
 import { apiRequest } from "./api";
 import type {
+  Achievement,
   AdminQuotaInfo,
   AdminServer,
   Allocation,
@@ -109,6 +110,17 @@ export const serversApi = {
     apiRequest<void>(`/api/v1/servers/${id}/console`, { method: "POST", body: { input } }),
   setDescription: (id: string, description: string) =>
     apiRequest<void>(`/api/v1/servers/${id}/description`, { method: "PUT", body: { description } }),
+  clone: (id: string) => apiRequest<Server>(`/api/v1/servers/${id}/clone`, { method: "POST" }),
+  favorite: (id: string) => apiRequest<void>(`/api/v1/servers/${id}/favorite`, { method: "POST" }),
+  unfavorite: (id: string) => apiRequest<void>(`/api/v1/servers/${id}/favorite`, { method: "DELETE" }),
+};
+
+export const favoritesApi = {
+  list: () => apiRequest<string[]>("/api/v1/me/favorites"),
+};
+
+export const achievementsApi = {
+  list: () => apiRequest<Achievement[]>("/api/v1/achievements"),
 };
 
 export const backupsApi = {
@@ -230,6 +242,7 @@ export const adminApi = {
 
   createEgg: (input: EggInput) => apiRequest<Egg>("/api/v1/admin/eggs", { method: "POST", body: input }),
   updateEgg: (id: string, input: EggInput) => apiRequest<Egg>(`/api/v1/admin/eggs/${id}`, { method: "PUT", body: input }),
+  exportEgg: (id: string) => apiRequest<EggInput>(`/api/v1/admin/eggs/${id}/export`),
   deleteEgg: (id: string) => apiRequest<void>(`/api/v1/admin/eggs/${id}`, { method: "DELETE" }),
 
   getSettings: () => apiRequest<Record<string, string>>("/api/v1/admin/settings"),

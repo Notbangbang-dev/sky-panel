@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "./lib/ThemeProvider";
 import { AnimatedBackground } from "./components/AnimatedBackground";
@@ -16,6 +16,7 @@ import { AfkPage } from "./pages/AfkPage";
 import { StorePage } from "./pages/StorePage";
 import { WalletPage } from "./pages/WalletPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
+import { AchievementsPage } from "./pages/AchievementsPage";
 import { AccountPage } from "./pages/AccountPage";
 import { ThemeBuilderPage } from "./pages/ThemeBuilderPage";
 import { AdminPage } from "./pages/AdminPage";
@@ -28,6 +29,14 @@ function Shell({ children }: { children: React.ReactNode }) {
       <AppShell>{children}</AppShell>
     </ProtectedRoute>
   );
+}
+
+// Keying the detail page on the server id forces a full remount when navigating
+// between servers on the same route, so its console/stats/sparkline buffers
+// (and the xterm instance) reset instead of showing the previous server's data.
+function ServerDetailRoute() {
+  const { id } = useParams<{ id: string }>();
+  return <ServerDetailPage key={id} />;
 }
 
 function App() {
@@ -45,12 +54,13 @@ function App() {
 
             <Route path="/" element={<Shell><DashboardPage /></Shell>} />
             <Route path="/servers" element={<Shell><ServersListPage /></Shell>} />
-            <Route path="/servers/:id" element={<Shell><ServerDetailPage /></Shell>} />
+            <Route path="/servers/:id" element={<Shell><ServerDetailRoute /></Shell>} />
             <Route path="/servers/:id/reinstall" element={<Shell><ReinstallPage /></Shell>} />
             <Route path="/nodes" element={<Shell><NodesPage /></Shell>} />
             <Route path="/wallet" element={<Shell><WalletPage /></Shell>} />
             <Route path="/store" element={<Shell><StorePage /></Shell>} />
             <Route path="/leaderboard" element={<Shell><LeaderboardPage /></Shell>} />
+            <Route path="/achievements" element={<Shell><AchievementsPage /></Shell>} />
             <Route path="/afk" element={<Shell><AfkPage /></Shell>} />
             <Route path="/account" element={<Shell><AccountPage /></Shell>} />
             <Route path="/account/theme" element={<Shell><ThemeBuilderPage /></Shell>} />

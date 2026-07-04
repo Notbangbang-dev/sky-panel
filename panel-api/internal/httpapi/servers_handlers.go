@@ -69,6 +69,12 @@ func (d Deps) CreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Serialize this user's create/clone requests so the quota check and the
+	// row insert are atomic per user (see keyedMutex): concurrent creates must
+	// not each pass the check against the same pre-insert snapshot.
+	unlock := serverCreateLocks.lock(claims.UserID)
+	defer unlock()
+
 	// Enforce the user's resource quota (admins are unmetered).
 	if claims.Role != string(models.RoleAdmin) {
 		if err := d.QuotaSvc.CheckCreate(claims.UserID, req.MemoryBytes, req.CPULimit, req.DiskBytes); err != nil {

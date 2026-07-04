@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
-import { eggsApi, nodesApi, quotaApi, serversApi } from "../lib/endpoints";
+import { Link, useNavigate } from "react-router-dom";
+import { eggsApi, favoritesApi, nodesApi, quotaApi, serversApi } from "../lib/endpoints";
 import { StatusBadge } from "../components/StatusBadge";
 import { QuotaMeters } from "../components/QuotaMeters";
 import { bytesPerMB } from "../lib/format";
@@ -9,6 +9,7 @@ import { ApiError } from "../lib/api";
 
 export function ServersListPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: servers } = useQuery({
     queryKey: ["servers"],
     queryFn: serversApi.list,
@@ -20,7 +21,46 @@ export function ServersListPage() {
   const { data: eggs } = useQuery({ queryKey: ["eggs"], queryFn: eggsApi.list });
   const { data: nodes } = useQuery({ queryKey: ["nodes"], queryFn: nodesApi.list });
   const { data: quota } = useQuery({ queryKey: ["quota"], queryFn: quotaApi.mine });
+  const { data: favorites } = useQuery({ queryKey: ["favorites"], queryFn: favoritesApi.list });
   const allowUnlimitedCpu = quota?.allow_unlimited_cpu ?? true;
+
+  const favoriteSet = useMemo(() => new Set(favorites ?? []), [favorites]);
+
+  const toggleFavorite = useMutation({
+    mutationFn: ({ id, on }: { id: string; on: boolean }) =>
+      on ? serversApi.favorite(id) : serversApi.unfavorite(id),
+    // Optimistic: flip the star instantly, roll back on error.
+    onMutate: async ({ id, on }) => {
+      await queryClient.cancelQueries({ queryKey: ["favorites"] });
+      const prev = queryClient.getQueryData<string[]>(["favorites"]) ?? [];
+      queryClient.setQueryData<string[]>(["favorites"], on ? [...prev, id] : prev.filter((x) => x !== id));
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(["favorites"], ctx.prev);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["favorites"] }),
+  });
+
+  const cloneServer = useMutation({
+    mutationFn: (id: string) => serversApi.clone(id),
+    onSuccess: (server) => {
+      queryClient.invalidateQueries({ queryKey: ["servers"] });
+      queryClient.invalidateQueries({ queryKey: ["quota"] });
+      navigate(`/servers/${server.id}`);
+    },
+    onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to clone server"),
+  });
+
+  const sortedServers = useMemo(() => {
+    if (!servers) return servers;
+    return [...servers].sort((a, b) => {
+      const fa = favoriteSet.has(a.id) ? 0 : 1;
+      const fb = favoriteSet.has(b.id) ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      return a.name.localeCompare(b.name);
+    });
+  }, [servers, favoriteSet]);
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
@@ -198,30 +238,62 @@ export function ServersListPage() {
       <table className="sp-table">
         <thead>
           <tr>
+            <th style={{ width: 36 }}></th>
             <th>Name</th>
             <th>Status</th>
             <th>Port</th>
             <th>Memory</th>
+            <th style={{ width: 90, textAlign: "right" }}></th>
           </tr>
         </thead>
         <tbody>
-          {servers?.map((server) => (
-            <tr key={server.id}>
-              <td>
-                <Link to={`/servers/${server.id}`}>{server.name}</Link>
-              </td>
-              <td>
-                <StatusBadge status={server.status} />
-                {server.suspended && (
-                  <span className="sp-badge" style={{ marginLeft: 6, color: "#ff9b9b", borderColor: "#ff9b9b" }}>
-                    suspended
-                  </span>
-                )}
-              </td>
-              <td className="sp-mono">{server.primary_port}</td>
-              <td className="sp-mono">{(server.memory_bytes / 1024 / 1024).toFixed(0)}MB</td>
-            </tr>
-          ))}
+          {sortedServers?.map((server) => {
+            const starred = favoriteSet.has(server.id);
+            return (
+              <tr key={server.id}>
+                <td>
+                  <button
+                    type="button"
+                    className="sp-star"
+                    aria-label={starred ? "Unfavorite" : "Favorite"}
+                    aria-pressed={starred}
+                    title={starred ? "Unfavorite" : "Favorite"}
+                    data-on={starred ? "1" : undefined}
+                    onClick={() => toggleFavorite.mutate({ id: server.id, on: !starred })}
+                  >
+                    {starred ? "★" : "☆"}
+                  </button>
+                </td>
+                <td>
+                  <Link to={`/servers/${server.id}`}>{server.name}</Link>
+                </td>
+                <td>
+                  <StatusBadge status={server.status} />
+                  {server.suspended && (
+                    <span className="sp-badge" style={{ marginLeft: 6, color: "#ff9b9b", borderColor: "#ff9b9b" }}>
+                      suspended
+                    </span>
+                  )}
+                </td>
+                <td className="sp-mono">{server.primary_port}</td>
+                <td className="sp-mono">{(server.memory_bytes / 1024 / 1024).toFixed(0)}MB</td>
+                <td style={{ textAlign: "right" }}>
+                  <button
+                    type="button"
+                    className="sp-btn sp-btn--ghost sp-btn--sm"
+                    title="Clone this server's configuration into a new server"
+                    disabled={cloneServer.isPending}
+                    onClick={() => {
+                      setError(null);
+                      cloneServer.mutate(server.id);
+                    }}
+                  >
+                    Clone
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

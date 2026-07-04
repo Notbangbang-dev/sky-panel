@@ -66,6 +66,19 @@ func (r *RedeemCodes) List() ([]*models.RedeemCode, error) {
 	return out, rows.Err()
 }
 
+// HasRedeemed reports whether a user has redeemed any code (for achievements).
+func (r *RedeemCodes) HasRedeemed(userID string) (bool, error) {
+	var one int
+	err := r.db.QueryRow(`SELECT 1 FROM redeem_code_redemptions WHERE user_id = ? LIMIT 1`, userID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (r *RedeemCodes) Delete(id string) error {
 	res, err := r.db.Exec(`DELETE FROM redeem_codes WHERE id = ?`, id)
 	return checkRowsAffected(res, err)
