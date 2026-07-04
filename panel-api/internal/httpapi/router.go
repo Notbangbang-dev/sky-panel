@@ -122,6 +122,7 @@ func NewRouter(d Deps) http.Handler {
 
 				r.Route("/admin/users", func(r chi.Router) {
 					r.Get("/", d.AdminListUsers)
+					r.Post("/{userID}/reset-password", d.AdminResetUserPassword)
 					r.Post("/{userID}/coins/adjust", d.AdminAdjustCoins)
 					r.Get("/{userID}/quota", d.AdminGetUserQuota)
 					r.Put("/{userID}/quota", d.AdminSetUserQuota)
@@ -132,10 +133,14 @@ func NewRouter(d Deps) http.Handler {
 
 				r.Route("/admin/servers", func(r chi.Router) {
 					r.Get("/", d.AdminListServers)
+					r.Post("/purge", d.AdminPurgeServers)
 					r.Post("/{serverID}/suspend", d.AdminSuspendServer)
 					r.Post("/{serverID}/unsuspend", d.AdminUnsuspendServer)
 					r.Post("/{serverID}/owner", d.AdminTransferServer)
+					r.Delete("/{serverID}", d.AdminDeleteServer)
 				})
+
+				r.Get("/admin/analytics", d.AdminAnalytics)
 
 				r.Route("/admin/redeem-codes", func(r chi.Router) {
 					r.Get("/", d.AdminListRedeemCodes)

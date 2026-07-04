@@ -2,6 +2,26 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.20.0] - 2026-07-04
+
+### ✨ New Features
+
+Admin server & user management, expanded:
+
+- **Delete any server from the admin console.** The Admin → Servers fleet view now has a per-server **Delete** (removes the container, frees its port), alongside the existing **Transfer owner**.
+- **Purge servers (bulk data-wipe).** Multi-select servers with checkboxes and **Purge** them in one go — best-effort, with a report of how many were removed. There's a filter box to narrow the list first, and bulk actions only ever touch the rows you can currently see.
+- **Bulk & per-server suspend / unsuspend** right from the fleet view.
+- **Admin analytics dashboard.** A new Admin → **Analytics** tab: users (and admins), servers (with breakdowns by status and by egg), nodes online, egg count, and total coins in circulation — all live.
+- **Reset a user's password (admin).** Set a new password for any user from Admin → Users; it logs out all of that user's sessions.
+
+### 🔒 Hardening
+
+An adversarial audit of this release fixed: the bulk selection now stays in sync after a single delete and is scoped to the visible/filtered rows (so a hidden selection can't be purged unknowingly), and bulk suspend / purge now report partial failures instead of silently swallowing them.
+
+### 🔗 Requires
+
+- Pairs with **sky-daemon v0.4.8** for the reinstall "port already allocated" self-heal.
+
 ## [0.19.0] - 2026-07-04
 
 ### 🛠 Fixes

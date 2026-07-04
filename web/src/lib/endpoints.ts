@@ -1,6 +1,7 @@
 import { apiRequest } from "./api";
 import type {
   Achievement,
+  AdminAnalytics,
   ModrinthSearchResult,
   ModrinthVersion,
   AdminQuotaInfo,
@@ -256,6 +257,15 @@ export const adminApi = {
     apiRequest<void>(`/api/v1/admin/servers/${id}/owner`, { method: "POST", body: { owner_id: ownerId } }),
   suspendServer: (id: string) => apiRequest<void>(`/api/v1/admin/servers/${id}/suspend`, { method: "POST" }),
   unsuspendServer: (id: string) => apiRequest<void>(`/api/v1/admin/servers/${id}/unsuspend`, { method: "POST" }),
+  deleteServer: (id: string) => apiRequest<void>(`/api/v1/admin/servers/${id}`, { method: "DELETE" }),
+  purgeServers: (serverIds: string[]) =>
+    apiRequest<{ deleted: number; failed: string[] }>("/api/v1/admin/servers/purge", {
+      method: "POST",
+      body: { server_ids: serverIds },
+    }),
+  analytics: () => apiRequest<AdminAnalytics>("/api/v1/admin/analytics"),
+  resetUserPassword: (userId: string, password: string) =>
+    apiRequest<void>(`/api/v1/admin/users/${userId}/reset-password`, { method: "POST", body: { password } }),
 
   listRedeemCodes: () => apiRequest<RedeemCode[]>("/api/v1/admin/redeem-codes"),
   createRedeemCode: (code: string, coins: number, maxUses: number) =>

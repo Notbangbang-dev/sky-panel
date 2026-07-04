@@ -9,6 +9,50 @@ import (
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/repo"
 )
 
+type adminResetPasswordRequest struct {
+	Password string `json:"password"`
+}
+
+// AdminResetUserPassword sets a new password for any user (for support/recovery)
+// and logs out all of that user's sessions, so a leaked or forgotten password
+// can be rotated without the old one.
+func (d Deps) AdminResetUserPassword(w http.ResponseWriter, r *http.Request) {
+	userID := pathParam(r, "userID")
+
+	var req adminResetPasswordRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid request body")
+		return
+	}
+	if len(req.Password) < 8 {
+		writeError(w, http.StatusBadRequest, "bad_request", "password must be at least 8 characters")
+		return
+	}
+
+	if _, err := d.Users.GetByID(userID); err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load user")
+		return
+	}
+
+	hash, err := auth.HashPassword(req.Password)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to hash password")
+		return
+	}
+	if err := d.Users.SetPasswordHash(userID, hash); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to update password")
+		return
+	}
+	// Invalidate every existing session for that user.
+	_ = d.RefreshTokens.DeleteAllForUser(userID)
+	d.audit(r, "admin.user.password_reset", userID, "")
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (d Deps) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := d.Users.List()
 	if err != nil {

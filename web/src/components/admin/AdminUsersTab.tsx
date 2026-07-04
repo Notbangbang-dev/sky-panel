@@ -44,6 +44,11 @@ export function AdminUsersTab() {
     onSuccess: invalidate,
   });
   const deleteUser = useMutation({ mutationFn: (id: string) => adminApi.deleteUser(id), onSuccess: invalidate });
+  const resetPassword = useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) => adminApi.resetUserPassword(id, password),
+    onSuccess: () => window.alert("Password reset — the user's sessions were logged out."),
+    onError: () => window.alert("Failed to reset password (min 8 characters)."),
+  });
   const beginImpersonation = useAuthStore((s) => s.beginImpersonation);
   const impersonate = useMutation({
     mutationFn: (id: string) => adminApi.impersonate(id),
@@ -121,6 +126,17 @@ export function AdminUsersTab() {
                   </button>
                   <button className="sp-btn sp-btn--sm" onClick={() => toggleQuota(u.id)}>
                     Quota
+                  </button>
+                  <button
+                    className="sp-btn sp-btn--sm"
+                    disabled={resetPassword.isPending}
+                    onClick={() => {
+                      const pw = window.prompt(`Set a new password for “${u.username}” (min 8 chars). Their sessions will be logged out.`);
+                      if (pw) resetPassword.mutate({ id: u.id, password: pw });
+                    }}
+                    title="Set a new password for this user"
+                  >
+                    Reset PW
                   </button>
                   <button
                     className="sp-btn sp-btn--sm"

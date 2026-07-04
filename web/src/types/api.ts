@@ -87,6 +87,19 @@ export interface AdminServer extends Server {
   owner_username: string;
 }
 
+export interface AdminAnalytics {
+  users: number;
+  admins: number;
+  servers: number;
+  servers_by_status: Record<string, number>;
+  suspended: number;
+  servers_by_egg: Record<string, number>;
+  nodes: number;
+  nodes_connected: number;
+  eggs: number;
+  coins_in_circulation: number;
+}
+
 export interface RedeemCode {
   id: string;
   code: string;

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/repo"
@@ -67,6 +68,62 @@ func (d Deps) AdminListServers(w http.ResponseWriter, r *http.Request) {
 		out = append(out, adminServerResponse{serverResponse: toServerResponse(s), OwnerUsername: usernames[s.OwnerID]})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// AdminDeleteServer deletes any server (regardless of owner): the node is told
+// to remove the container, the port allocation is freed, and the row is dropped.
+func (d Deps) AdminDeleteServer(w http.ResponseWriter, r *http.Request) {
+	id := pathParam(r, "serverID")
+	if _, err := d.Servers.GetByID(id); err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "not_found", "server not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load server")
+		return
+	}
+	if err := d.ServerSvc.DeleteServer(id); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+	d.audit(r, "server.admin_delete", id, "")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type purgeServersRequest struct {
+	ServerIDs []string `json:"server_ids"`
+}
+
+type purgeServersResult struct {
+	Deleted int      `json:"deleted"`
+	Failed  []string `json:"failed"`
+}
+
+// AdminPurgeServers bulk-deletes the given servers — a data-wipe tool. Each
+// deletion is best-effort; the response reports how many were removed and which
+// ids failed, so one bad server doesn't abort the whole purge.
+func (d Deps) AdminPurgeServers(w http.ResponseWriter, r *http.Request) {
+	var req purgeServersRequest
+	if err := decodeJSON(r, &req); err != nil || len(req.ServerIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "server_ids is required")
+		return
+	}
+	// Bound the batch so one request can't try to churn the whole fleet at once.
+	if len(req.ServerIDs) > 200 {
+		writeError(w, http.StatusBadRequest, "bad_request", "too many servers in one purge (max 200)")
+		return
+	}
+
+	result := purgeServersResult{Failed: []string{}}
+	for _, id := range req.ServerIDs {
+		if err := d.ServerSvc.DeleteServer(id); err != nil {
+			result.Failed = append(result.Failed, id)
+			continue
+		}
+		result.Deleted++
+	}
+	d.audit(r, "server.purge", "", fmt.Sprintf("deleted %d, failed %d", result.Deleted, len(result.Failed)))
+	writeJSON(w, http.StatusOK, result)
 }
 
 type transferOwnerRequest struct {
