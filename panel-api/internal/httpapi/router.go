@@ -36,10 +36,13 @@ func NewRouter(d Deps) http.Handler {
 
 		r.Route("/public", func(r chi.Router) {
 			r.Get("/registration-status", d.RegistrationStatus)
+			r.Get("/appearance", d.PublicAppearance)
+			r.Get("/maintenance", d.MaintenanceStatus)
 		})
 
 		r.Group(func(r chi.Router) {
 			r.Use(auth.RequireAuth(d.JWT, d.resolveAPIKey))
+			r.Use(d.maintenanceGate)
 
 			r.Get("/me", d.Me)
 			r.Get("/me/quota", d.MyQuota)
@@ -57,6 +60,9 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/leaderboard", d.Leaderboard)
 			r.Get("/achievements", d.Achievements)
 			r.Get("/me/favorites", d.ListFavorites)
+
+			r.Get("/modrinth/search", d.ModrinthSearch)
+			r.Get("/modrinth/versions", d.ModrinthVersions)
 
 			r.Route("/servers", func(r chi.Router) {
 				r.Get("/", d.ListServers)
@@ -90,6 +96,7 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/{serverID}/files", d.ListFiles)
 				r.Get("/{serverID}/files/content", d.ReadFile)
 				r.Put("/{serverID}/files/content", d.WriteFile)
+				r.Post("/{serverID}/modrinth/install", d.ModrinthInstall)
 				r.Post("/{serverID}/files/rename", d.RenameFile)
 				r.Delete("/{serverID}/files", d.DeleteFile)
 				r.Post("/{serverID}/files/mkdir", d.Mkdir)

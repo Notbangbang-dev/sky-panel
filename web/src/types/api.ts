@@ -218,6 +218,42 @@ export interface Achievement {
   unlocked: boolean;
 }
 
+export interface ModrinthHit {
+  project_id: string;
+  slug: string;
+  title: string;
+  description: string;
+  author: string;
+  project_type: string;
+  downloads: number;
+  follows: number;
+  categories: string[];
+  versions: string[];
+  icon_url: string;
+}
+
+export interface ModrinthSearchResult {
+  hits: ModrinthHit[];
+  total_hits: number;
+}
+
+export interface ModrinthVersionFile {
+  url: string;
+  filename: string;
+  primary: boolean;
+  size: number;
+}
+
+export interface ModrinthVersion {
+  id: string;
+  name: string;
+  version_number: string;
+  version_type: string;
+  game_versions: string[];
+  loaders: string[];
+  files: ModrinthVersionFile[];
+}
+
 export const PERMISSIONS = ["console", "files", "power", "settings"] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 

@@ -10,8 +10,9 @@ import { AdminQuotasTab } from "../components/admin/AdminQuotasTab";
 import { AdminSettingsTab } from "../components/admin/AdminSettingsTab";
 import { AdminAuditTab } from "../components/admin/AdminAuditTab";
 import { AdminBroadcastTab } from "../components/admin/AdminBroadcastTab";
+import { AdminAppearanceTab } from "../components/admin/AdminAppearanceTab";
 
-const TABS = ["Users", "Servers", "Nodes", "Allocations", "Eggs", "Economy", "Codes", "Quotas", "Settings", "Audit log", "Broadcast"] as const;
+const TABS = ["Users", "Servers", "Nodes", "Allocations", "Eggs", "Economy", "Codes", "Quotas", "Appearance", "Settings", "Audit log", "Broadcast"] as const;
 type Tab = (typeof TABS)[number];
 
 export function AdminPage() {
@@ -42,6 +43,7 @@ export function AdminPage() {
       {tab === "Economy" && <AdminEconomyTab />}
       {tab === "Codes" && <AdminCodesTab />}
       {tab === "Quotas" && <AdminQuotasTab />}
+      {tab === "Appearance" && <AdminAppearanceTab />}
       {tab === "Settings" && <AdminSettingsTab />}
       {tab === "Audit log" && <AdminAuditTab />}
       {tab === "Broadcast" && <AdminBroadcastTab />}

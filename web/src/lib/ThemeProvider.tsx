@@ -9,6 +9,7 @@ import {
   saveCustomThemes,
   type Theme,
 } from "./theme";
+import { useAppearance } from "./AppearanceProvider";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -21,13 +22,18 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const { adminThemeId } = useAppearance();
   const [customThemes, setCustomThemes] = useState<Theme[]>(() => loadCustomThemes());
+  // A user who has explicitly picked a theme keeps it; otherwise we follow the
+  // instance-wide admin preset, falling back to the built-in default.
+  const [hasUserChoice, setHasUserChoice] = useState<boolean>(() => loadActiveThemeId() !== null);
   const [activeThemeId, setActiveThemeId] = useState<string>(() => loadActiveThemeId() ?? DEFAULT_THEME.id);
 
   const themes = useMemo(() => [...PRESET_THEMES, ...customThemes], [customThemes]);
+  const effectiveId = hasUserChoice ? activeThemeId : adminThemeId || DEFAULT_THEME.id;
   const theme = useMemo(
-    () => themes.find((t) => t.id === activeThemeId) ?? DEFAULT_THEME,
-    [themes, activeThemeId],
+    () => themes.find((t) => t.id === effectiveId) ?? DEFAULT_THEME,
+    [themes, effectiveId],
   );
 
   useEffect(() => {
@@ -36,6 +42,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setThemeId = useCallback((id: string) => {
     setActiveThemeId(id);
+    setHasUserChoice(true);
     saveActiveThemeId(id);
   }, []);
 

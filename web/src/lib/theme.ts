@@ -47,6 +47,96 @@ export const PRESET_THEMES: Theme[] = [
     animationIntensity: "normal",
     builtin: true,
   },
+  {
+    id: "nebula",
+    name: "Nebula",
+    background: "#0a0812",
+    backgroundAlt: "#100c1c",
+    surface: "#16112459",
+    surfaceBorder: "#2c2148",
+    text: "#efeaff",
+    textMuted: "#9a90bd",
+    accent: "#a985ff",
+    accentText: "#0a0812",
+    radius: "12px",
+    animationIntensity: "high",
+    builtin: true,
+  },
+  {
+    id: "ember",
+    name: "Ember",
+    background: "#0f0906",
+    backgroundAlt: "#160d08",
+    surface: "#1b1109",
+    surfaceBorder: "#3a2213",
+    text: "#fbeee3",
+    textMuted: "#b39684",
+    accent: "#ff7a3d",
+    accentText: "#0f0906",
+    radius: "8px",
+    animationIntensity: "normal",
+    builtin: true,
+  },
+  {
+    id: "arctic",
+    name: "Arctic",
+    background: "#060b0e",
+    backgroundAlt: "#0a1216",
+    surface: "#0e191f",
+    surfaceBorder: "#1c333d",
+    text: "#e8f6fb",
+    textMuted: "#84a3ae",
+    accent: "#4fd6ff",
+    accentText: "#060b0e",
+    radius: "10px",
+    animationIntensity: "normal",
+    builtin: true,
+  },
+  {
+    id: "void",
+    name: "Void",
+    background: "#000000",
+    backgroundAlt: "#060606",
+    surface: "#0c0c0c",
+    surfaceBorder: "#1e1e1e",
+    text: "#ffffff",
+    textMuted: "#7d7d7d",
+    accent: "#ffffff",
+    accentText: "#000000",
+    radius: "2px",
+    animationIntensity: "high",
+    builtin: true,
+  },
+  {
+    id: "paper",
+    name: "Paper",
+    background: "#eeece6",
+    backgroundAlt: "#e4e1d8",
+    surface: "#f7f5ef",
+    surfaceBorder: "#cfcabd",
+    text: "#1a1917",
+    textMuted: "#6a675e",
+    accent: "#1a1917",
+    accentText: "#f7f5ef",
+    radius: "6px",
+    animationIntensity: "subtle",
+    builtin: true,
+  },
+  {
+    id: "sakura",
+    name: "Sakura",
+    background: "#0d0a0c",
+    backgroundAlt: "#140f12",
+    surface: "#1a1317",
+    surfaceBorder: "#38222e",
+    text: "#fbe9f1",
+    textMuted: "#b58fa2",
+    accent: "#ff8fc7",
+    accentText: "#0d0a0c",
+    radius: "14px",
+    animationIntensity: "normal",
+    builtin: true,
+  },
 ];
 
 export const DEFAULT_THEME = PRESET_THEMES[0];
@@ -70,6 +160,10 @@ export function applyThemeToDocument(theme: Theme) {
   }
   root.dataset.animationIntensity = theme.animationIntensity;
   root.dataset.theme = theme.id;
+}
+
+export function findPreset(id: string): Theme | undefined {
+  return PRESET_THEMES.find((t) => t.id === id);
 }
 
 const CUSTOM_THEMES_KEY = "sky-panel:custom-themes";

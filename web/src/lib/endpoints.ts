@@ -1,6 +1,8 @@
 import { apiRequest } from "./api";
 import type {
   Achievement,
+  ModrinthSearchResult,
+  ModrinthVersion,
   AdminQuotaInfo,
   AdminServer,
   Allocation,
@@ -61,6 +63,32 @@ export const schedulesApi = {
 
 export const leaderboardApi = {
   list: () => apiRequest<LeaderboardEntry[]>("/api/v1/leaderboard"),
+};
+
+export const publicApi = {
+  appearance: () =>
+    apiRequest<{ theme_preset: string; custom_css: string; background: string }>("/api/v1/public/appearance", {
+      auth: false,
+    }),
+  maintenance: () =>
+    apiRequest<{ enabled: boolean; message: string }>("/api/v1/public/maintenance", { auth: false }),
+};
+
+export const modrinthApi = {
+  search: (params: { q: string; type: string; loader?: string; version?: string; limit?: number }) => {
+    const qs = new URLSearchParams({ q: params.q, type: params.type, limit: String(params.limit ?? 20) });
+    if (params.loader) qs.set("loader", params.loader);
+    if (params.version) qs.set("version", params.version);
+    return apiRequest<ModrinthSearchResult>(`/api/v1/modrinth/search?${qs.toString()}`);
+  },
+  versions: (project: string, loader?: string, version?: string) => {
+    const qs = new URLSearchParams({ project });
+    if (loader) qs.set("loader", loader);
+    if (version) qs.set("version", version);
+    return apiRequest<ModrinthVersion[]>(`/api/v1/modrinth/versions?${qs.toString()}`);
+  },
+  install: (serverId: string, body: { download_url: string; filename: string; folder: "mods" | "plugins" }) =>
+    apiRequest<{ path: string }>(`/api/v1/servers/${serverId}/modrinth/install`, { method: "POST", body }),
 };
 
 export const authApi = {

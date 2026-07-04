@@ -1,7 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "./lib/ThemeProvider";
-import { AnimatedBackground } from "./components/AnimatedBackground";
+import { AppearanceProvider } from "./lib/AppearanceProvider";
+import { Background } from "./components/Background";
+import { MaintenanceGate } from "./components/MaintenanceGate";
 import { AppShell } from "./components/AppShell";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { BroadcastBanner } from "./components/BroadcastBanner";
@@ -42,13 +44,15 @@ function ServerDetailRoute() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <AnimatedBackground />
-        <div className="sp-scanlines" />
-        <div className="sp-grain" />
-        <BrowserRouter>
-          <BroadcastBanner />
-          <Routes>
+      <AppearanceProvider>
+        <ThemeProvider>
+          <Background />
+          <div className="sp-scanlines" />
+          <div className="sp-grain" />
+          <BrowserRouter>
+            <BroadcastBanner />
+            <MaintenanceGate>
+              <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
 
@@ -75,10 +79,12 @@ function App() {
               }
             />
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </ThemeProvider>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </MaintenanceGate>
+          </BrowserRouter>
+        </ThemeProvider>
+      </AppearanceProvider>
     </QueryClientProvider>
   );
 }

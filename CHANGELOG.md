@@ -2,6 +2,31 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.18.0] - 2026-07-04
+
+### ✨ New Features
+
+- **Modrinth mod & plugin browser.** A new **Mods** tab on every server searches Modrinth for mods or plugins (filter by loader and Minecraft version) and installs a chosen file straight into the server's `mods/` or `plugins/` folder — one click, no manual uploads. Search and downloads are proxied through the panel.
+- **Modrinth modpack egg.** A new egg auto-installs a whole modpack from a Modrinth slug or URL (powered by `itzg/minecraft-server`); the loader and version come from the pack itself.
+- **Admin appearance studio.** Admin → **Appearance** now controls the whole instance's look: pick from **8 preset themes** (Monochrome, Signal, Nebula, Ember, Arctic, Void, Paper, Sakura), set the **background** to the animated mesh, a gradient, a solid color, an **image**, or a looping **video** (with blur + dim), and inject **custom CSS**. It applies to every user and the login page; individuals can still pick their own theme.
+- **Maintenance mode.** Admins can take the panel offline with a custom message — everyone except admins sees a maintenance screen, and non-admin API calls are refused, so admins can still fix things and flip it back.
+
+### 🛠 Fixes
+
+- **Live stats now survive a daemon restart.** The node daemon rebuilt its container tracking only from new commands, so after a restart the CPU/memory/network cards sat on a dash for running servers. The daemon (v0.4.5) now reconciles running containers on startup, and the server page shows a clear "waiting for the node" state instead of a bare dash while the first heartbeat lands.
+
+### 🔒 Security &amp; hardening
+
+An adversarial audit of this release turned up and fixed:
+
+- **Modrinth downloads re-validate every redirect hop** against the Modrinth host allowlist, so a redirect can't be used to reach an internal address (defense-in-depth SSRF).
+- **Backgrounds fall back to the animated mesh** if an admin's image/video URL fails to load, instead of leaving a dead background instance-wide.
+- **Per-mod install state** so installing one mod no longer greys out every other Install button.
+
+### 🔗 Requires
+
+- Pairs with **sky-daemon v0.4.5** for the stats-after-restart fix (older daemons still work; they just won't reconcile on restart).
+
 ## [0.17.0] - 2026-07-04
 
 ### ✨ New Features

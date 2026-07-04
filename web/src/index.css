@@ -557,6 +557,74 @@ button {
   margin: 8px 0;
 }
 
+/* ---------- Configurable backgrounds ---------- */
+
+/* Fixed layer behind everything, matching the animated canvas's stacking. */
+.sp-bg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.sp-bg-media {
+  position: absolute;
+  /* Slight overscan so a blur doesn't reveal the page edges. */
+  inset: -40px;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
+  object-fit: cover;
+  background-size: cover;
+  background-position: center;
+}
+
+.sp-bg-dim {
+  position: absolute;
+  inset: 0;
+  background: #000;
+}
+
+/* ---------- Maintenance ---------- */
+
+.sp-maintenance {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.sp-maintenance__card {
+  max-width: 460px;
+  text-align: center;
+  padding: 40px 32px;
+}
+
+.sp-maintenance__glyph {
+  font-size: 44px;
+  color: var(--sp-accent);
+  animation: sp-spin 5s linear infinite;
+}
+
+@keyframes sp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sp-maintenance__title {
+  font-size: 22px;
+  margin: 14px 0 8px;
+}
+
+.sp-maintenance__msg {
+  color: var(--sp-text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 /* ---------- Achievements ---------- */
 
 .sp-ach-track {

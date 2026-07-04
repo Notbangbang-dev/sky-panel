@@ -12,6 +12,7 @@ import { SettingsTab } from "../components/server/SettingsTab";
 import { ActivityTab } from "../components/server/ActivityTab";
 import { BackupsTab } from "../components/server/BackupsTab";
 import { SchedulesTab } from "../components/server/SchedulesTab";
+import { ModrinthTab } from "../components/server/ModrinthTab";
 import { formatBytes, formatCpu } from "../lib/format";
 import { copyText } from "../lib/clipboard";
 import type { ContainerHeartbeat } from "../types/api";
@@ -22,7 +23,7 @@ interface ConsoleLine {
   message: string;
 }
 
-const TABS = ["Console", "Files", "Backups", "Schedules", "Activity", "Settings", "Sharing"] as const;
+const TABS = ["Console", "Files", "Mods", "Backups", "Schedules", "Activity", "Settings", "Sharing"] as const;
 type Tab = (typeof TABS)[number];
 
 export function ServerDetailPage() {
@@ -100,6 +101,9 @@ export function ServerDetailPage() {
   const errored = server.status === "errored";
   const running = server.status === "running";
   const busy = installing || stopping;
+  // Running per the panel, but no heartbeat has arrived yet — show a pending
+  // marker rather than a dead dash so it's clear we're waiting on the node.
+  const waitingForStats = running && !stats;
 
   const node = nodes?.find((n) => n.id === server.node_id);
   const address = node?.address ? `${node.address}:${server.primary_port}` : `:${server.primary_port}`;
@@ -257,19 +261,19 @@ export function ServerDetailPage() {
       <div className="sp-grid sp-grid--cards" style={{ marginBottom: 16 }}>
         <StatCard
           label="CPU"
-          value={stats ? `${stats.cpu_percent.toFixed(1)}%` : "—"}
+          value={stats ? `${stats.cpu_percent.toFixed(1)}%` : waitingForStats ? "···" : "—"}
           pct={stats && server.cpu_limit > 0 ? (stats.cpu_percent / server.cpu_limit) * 100 : stats?.cpu_percent}
           series={history.map((h) => h.cpu)}
         />
         <StatCard
           label="Memory"
-          value={stats ? `${(stats.mem_used_bytes / 1024 / 1024).toFixed(0)}MB` : "—"}
+          value={stats ? `${(stats.mem_used_bytes / 1024 / 1024).toFixed(0)}MB` : waitingForStats ? "···" : "—"}
           sub={stats ? `of ${formatBytes(stats.mem_limit_bytes || server.memory_bytes)}` : undefined}
           pct={stats && stats.mem_limit_bytes > 0 ? (stats.mem_used_bytes / stats.mem_limit_bytes) * 100 : undefined}
           series={history.map((h) => h.mem)}
         />
-        <StatCard label="Net RX" value={stats ? `${(stats.net_rx_bytes / 1024).toFixed(1)}KB` : "—"} />
-        <StatCard label="Net TX" value={stats ? `${(stats.net_tx_bytes / 1024).toFixed(1)}KB` : "—"} />
+        <StatCard label="Net RX" value={stats ? `${(stats.net_rx_bytes / 1024).toFixed(1)}KB` : waitingForStats ? "···" : "—"} />
+        <StatCard label="Net TX" value={stats ? `${(stats.net_tx_bytes / 1024).toFixed(1)}KB` : waitingForStats ? "···" : "—"} />
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
@@ -302,6 +306,7 @@ export function ServerDetailPage() {
         </div>
       )}
       {tab === "Files" && <FilesTab serverId={id!} />}
+      {tab === "Mods" && <ModrinthTab serverId={id!} />}
       {tab === "Backups" && <BackupsTab serverId={id!} />}
       {tab === "Schedules" && canManage && <SchedulesTab serverId={id!} />}
       {tab === "Activity" && <ActivityTab serverId={id!} />}
