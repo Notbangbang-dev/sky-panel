@@ -44,6 +44,23 @@ start_if_enabled() {
   systemctl is-enabled --quiet "$1" 2>/dev/null && systemctl start "$1" || true
 }
 
+# Print the top (most recent) section of a repo's CHANGELOG.md. The body is
+# captured into a variable first rather than piped straight into awk: piping
+# `curl | awk '... exit'` makes awk close the pipe early, so curl dies with
+# SIGPIPE (exit 23) and, under `set -o pipefail`, the whole pipeline "fails" —
+# printing a spurious "could not fetch" even though the changelog printed fine.
+print_changelog() {
+  local repo="$1" tag="$2" body
+  echo
+  echo "--- ${repo##*/} changelog ---"
+  if body="$(curl -fsSL "https://raw.githubusercontent.com/${repo}/main/CHANGELOG.md")"; then
+    # here-string (no upstream process), so awk's early exit can't SIGPIPE anything.
+    awk '/^## \[/{c++} c==2{exit} c==1' <<<"$body"
+  else
+    echo "(could not fetch changelog — see https://github.com/${repo}/releases/tag/${tag})"
+  fi
+}
+
 ARCH="$(detect_arch)"
 UPDATED_ANYTHING=0
 
@@ -98,11 +115,7 @@ if [[ -f "${INSTALL_DIR}/bin/panel-api" ]]; then
     log "panel-api/web updated to ${LATEST}"
     UPDATED_ANYTHING=1
 
-    echo
-    echo "--- sky-panel changelog ---"
-    curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/CHANGELOG.md" \
-      | awk "/^## \[/{if (seen) exit; seen=1} seen" \
-      || echo "(could not fetch changelog — see https://github.com/${REPO}/releases/tag/${LATEST})"
+    print_changelog "$REPO" "$LATEST"
   fi
 fi
 
@@ -139,11 +152,7 @@ if [[ -f "${INSTALL_DIR}/bin/sky-daemon" ]]; then
     log "sky-daemon updated to ${LATEST}"
     UPDATED_ANYTHING=1
 
-    echo
-    echo "--- sky-daemon changelog ---"
-    curl -fsSL "https://raw.githubusercontent.com/${DAEMON_REPO}/main/CHANGELOG.md" \
-      | awk "/^## \[/{if (seen) exit; seen=1} seen" \
-      || echo "(could not fetch changelog — see https://github.com/${DAEMON_REPO}/releases/tag/${LATEST})"
+    print_changelog "$DAEMON_REPO" "$LATEST"
   fi
 fi
 
