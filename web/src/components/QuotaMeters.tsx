@@ -19,6 +19,7 @@ export function QuotaMetersView({ quota, compact = false }: { quota: QuotaInfo; 
       <Meter label="Memory" used={usage.memory_bytes} total={limit.memory_bytes} render={formatBytes} />
       <Meter label="CPU" used={usage.cpu_percent} total={limit.cpu_percent} render={(v) => `${v}%`} />
       <Meter label="Disk" used={usage.disk_bytes} total={limit.disk_bytes} render={formatBytes} />
+      <Meter label="Databases" used={usage.databases} total={limit.databases} render={(v) => String(v)} />
     </div>
   );
 }

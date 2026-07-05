@@ -27,6 +27,7 @@ import type {
   ReadFileResult,
   RedeemCode,
   RotateNodeTokenResult,
+  Database,
   Schedule,
   ScheduleAction,
   Session,
@@ -177,6 +178,15 @@ export const backupsApi = {
     apiRequest<void>(`/api/v1/servers/${serverId}/backups?filename=${encodeURIComponent(filename)}`, {
       method: "DELETE",
     }),
+};
+
+export const databasesApi = {
+  list: (serverId: string) =>
+    apiRequest<{ databases: Database[] }>(`/api/v1/servers/${serverId}/databases`),
+  create: (serverId: string, name: string) =>
+    apiRequest<Database>(`/api/v1/servers/${serverId}/databases`, { method: "POST", body: { name } }),
+  remove: (serverId: string, databaseId: string) =>
+    apiRequest<void>(`/api/v1/servers/${serverId}/databases/${databaseId}`, { method: "DELETE" }),
 };
 
 export const subusersApi = {

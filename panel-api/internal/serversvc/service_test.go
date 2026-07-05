@@ -37,6 +37,8 @@ func (f *fakeSender) ConnectedNodeIDs() []string { return nil }
 
 func (f *fakeSender) SupportsPullImage(string) bool { return !f.noPull }
 
+func (f *fakeSender) SupportsDatabases(string) bool { return true }
+
 func newTestService(t *testing.T, sender CommandSender) (*Service, *repo.Nodes, *repo.Eggs, *repo.Servers, *repo.Users) {
 	t.Helper()
 

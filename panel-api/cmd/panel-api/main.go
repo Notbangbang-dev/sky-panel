@@ -47,6 +47,7 @@ func main() {
 	favorites := repo.NewFavorites(db)
 	settings := repo.NewSettings(db)
 	auditLog := repo.NewAudit(db)
+	databases := repo.NewDatabases(db)
 
 	agentRegistry := agenthub.NewRegistry()
 	agentHandler := agenthub.NewHandler(agentRegistry, nodes, hub)
@@ -55,11 +56,15 @@ func main() {
 	// roster/stats/console stream.
 	agentHandler.UseServerLocator(servers)
 	serverSvc := serversvc.NewService(servers, eggs, nodes, allocations, agentRegistry)
+	serverSvc.Databases = databases
 	// Warm each node's Docker image cache as soon as it connects, so the first
 	// server create on it is fast instead of blocking on a cold image pull.
 	agentHandler.OnNodeConnected = serverSvc.WarmImagesOnNode
 	// Drop a deleted server's tracked roster immediately.
 	serverSvc.OnServerDeleted = agentHandler.Forget
+
+	quotaSvc := quotasvc.NewService(servers, quotas, settings)
+	quotaSvc.Databases = databases
 
 	deps := httpapi.Deps{
 		Users:         users,
@@ -76,10 +81,11 @@ func main() {
 		Schedules:     schedules,
 		RedeemCodes:   redeemCodes,
 		Favorites:     favorites,
+		Databases:     databases,
 		ServerSvc:     serverSvc,
 		AgentHub:      agentHandler,
 		CoinSvc:       coinsvc.NewService(users, ledger, afk, dailyRewards, settings),
-		QuotaSvc:      quotasvc.NewService(servers, quotas, settings),
+		QuotaSvc:      quotaSvc,
 		StoreSvc:      storesvc.NewService(ledger, quotas),
 		Settings:      settings,
 		Audit:         auditLog,

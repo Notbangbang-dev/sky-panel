@@ -19,10 +19,12 @@ const (
 	DefaultMemoryBytes int64 = 2048 * 1024 * 1024  // 2 GB
 	DefaultCPUPercent  int   = 200                 // two cores
 	DefaultDiskBytes   int64 = 10240 * 1024 * 1024 // 10 GB
+	DefaultDatabases   int   = 0                   // databases are bought from the store
 
 	SettingMemoryBytes       = "quota.default_memory_bytes"
 	SettingCPUPercent        = "quota.default_cpu_percent"
 	SettingDiskBytes         = "quota.default_disk_bytes"
+	SettingDatabases         = "quota.default_databases"
 	SettingAllowUnlimitedCPU = "quota.allow_unlimited_cpu"
 )
 
@@ -35,6 +37,7 @@ type Quota struct {
 	MemoryBytes int64 `json:"memory_bytes"`
 	CPUPercent  int   `json:"cpu_percent"`
 	DiskBytes   int64 `json:"disk_bytes"`
+	Databases   int   `json:"databases"`
 }
 
 // Usage is a user's current allocation across all their servers.
@@ -43,11 +46,12 @@ type Usage struct {
 	MemoryBytes int64 `json:"memory_bytes"`
 	CPUPercent  int   `json:"cpu_percent"`
 	DiskBytes   int64 `json:"disk_bytes"`
+	Databases   int   `json:"databases"`
 }
 
 // Error reports which quota dimension a request would exceed.
 type Error struct {
-	Dimension string // "memory" | "cpu" | "disk"
+	Dimension string // "memory" | "cpu" | "disk" | "databases"
 	Limit     int64
 	Have      int64
 	Requested int64
@@ -62,6 +66,9 @@ type Service struct {
 	Servers  *repo.Servers
 	Quotas   *repo.Quotas
 	Settings *repo.Settings
+	// Databases is optional; when set, database usage/limits are reported and
+	// enforced. Nil in tests that don't exercise the databases dimension.
+	Databases *repo.Databases
 }
 
 func NewService(servers *repo.Servers, quotas *repo.Quotas, settings *repo.Settings) *Service {
@@ -83,6 +90,7 @@ func (s *Service) Effective(userID string) (Quota, error) {
 		MemoryBytes: base.MemoryBytes + bonus.MemoryBytes,
 		CPUPercent:  base.CPUPercent + bonus.CPUPercent,
 		DiskBytes:   base.DiskBytes + bonus.DiskBytes,
+		Databases:   int(s.settingInt64(SettingDatabases, int64(DefaultDatabases))) + bonus.Databases,
 	}, nil
 }
 
@@ -103,7 +111,29 @@ func (s *Service) Usage(userID, excludeServerID string) (Usage, error) {
 		u.CPUPercent += srv.CPULimit
 		u.DiskBytes += srv.DiskBytes
 	}
+	if s.Databases != nil {
+		if n, err := s.Databases.CountByOwner(userID); err == nil {
+			u.Databases = n
+		}
+	}
 	return u, nil
+}
+
+// CheckDatabaseCreate verifies a user has room for one more database within
+// their databases quota.
+func (s *Service) CheckDatabaseCreate(userID string) error {
+	limit, err := s.Effective(userID)
+	if err != nil {
+		return err
+	}
+	usage, err := s.Usage(userID, "")
+	if err != nil {
+		return err
+	}
+	if usage.Databases+1 > limit.Databases {
+		return &Error{Dimension: "databases", Limit: int64(limit.Databases), Have: int64(usage.Databases), Requested: 1}
+	}
+	return nil
 }
 
 // CheckCreate verifies a new server's requested resources fit within the

@@ -23,6 +23,9 @@ type Conn struct {
 	// supportsPull is true when the node advertised the pull_image capability
 	// in its hello, so the panel can safely send it that command.
 	supportsPull bool
+	// supportsDatabases is true when the node advertised the databases
+	// capability (v0.5.0+ with MariaDB configured).
+	supportsDatabases bool
 
 	pendingMu sync.Mutex
 	pending   map[string]chan AckPayload
@@ -31,8 +34,11 @@ type Conn struct {
 func newConn(nodeID string, ws *websocket.Conn, secret []byte, capabilities []string) *Conn {
 	c := &Conn{NodeID: nodeID, conn: ws, secret: secret, pending: make(map[string]chan AckPayload)}
 	for _, cap := range capabilities {
-		if cap == CapPullImage {
+		switch cap {
+		case CapPullImage:
 			c.supportsPull = true
+		case CapDatabases:
+			c.supportsDatabases = true
 		}
 	}
 	return c
@@ -155,6 +161,14 @@ func (r *Registry) Connected(nodeID string) bool {
 func (r *Registry) SupportsPullImage(nodeID string) bool {
 	conn, ok := r.Get(nodeID)
 	return ok && conn.supportsPull
+}
+
+// SupportsDatabases reports whether a connected node can provision databases
+// (daemon v0.5.0+ with MariaDB configured). False for offline nodes and older
+// daemons, so the panel can reject a create with a clear message.
+func (r *Registry) SupportsDatabases(nodeID string) bool {
+	conn, ok := r.Get(nodeID)
+	return ok && conn.supportsDatabases
 }
 
 // ConnectedNodeIDs returns the IDs of every node with a live connection.

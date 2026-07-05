@@ -97,6 +97,10 @@ func NewRouter(d Deps) http.Handler {
 				r.Post("/{serverID}/subusers", d.AddSubuser)
 				r.Delete("/{serverID}/subusers/{userID}", d.RemoveSubuser)
 
+				r.Get("/{serverID}/databases", d.ListDatabases)
+				r.Post("/{serverID}/databases", d.CreateDatabase)
+				r.Delete("/{serverID}/databases/{databaseID}", d.DeleteDatabase)
+
 				r.Get("/{serverID}/files", d.ListFiles)
 				r.Get("/{serverID}/files/content", d.ReadFile)
 				r.Put("/{serverID}/files/content", d.WriteFile)

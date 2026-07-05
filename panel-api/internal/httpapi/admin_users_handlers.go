@@ -111,6 +111,13 @@ func (d Deps) AdminDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Drop the user's databases on their nodes first — deleting the user
+	// CASCADE-removes the server and database rows, which would otherwise strand
+	// the real MariaDB databases with no pointer left to reclaim them.
+	if d.ServerSvc != nil {
+		d.ServerSvc.DeleteUserDatabases(userID)
+	}
+
 	if err := d.Users.Delete(userID); err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "user not found")

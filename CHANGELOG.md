@@ -2,6 +2,21 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.22.0] - 2026-07-05
+
+### ✨ New Features
+
+- **Databases.** Every server now has a **Databases** tab: create a MariaDB database in one click and get the full connection details — host, port, database name, username, a strong generated password, and a ready-to-paste JDBC URL (with reveal + copy). Databases are provisioned on the node that hosts the server, dropped automatically when the server is deleted, and can be shared with subusers via a new **databases** permission.
+- **Database slots in the store.** Databases count against a per-user quota, purchasable from the coin **Store** (+1 / +3 Databases) and shown as a meter alongside memory/CPU/disk. Admins can also grant a free baseline with the `quota.default_databases` setting.
+
+### 🔧 Requires
+
+- **sky-daemon v0.5.0** on each node, plus a MariaDB server the daemon is pointed at (`SKY_DB_ADMIN_*`). Nodes without it simply don't offer databases. Full setup: [docs/DATABASES.md](docs/DATABASES.md).
+
+### 🔒 Hardening
+
+An adversarial audit of the databases feature fixed, before ship: generated database/user names use a strict `[a-z0-9_]` charset (re-validated on the node) so they can't carry a SQL injection; names are collision-safe (64-bit random + pre-check) and a name conflict never drops another user's database; concurrent creates are serialized per user so the database quota can't be raced past; deleting a user now drops their databases on the nodes first (instead of orphaning them via cascade); and database drops on an old/unconfigured node fail fast instead of hanging. Requires **sky-daemon v0.5.0**, whose create is now atomic (a partial failure rolls back) and which supports a separate `SKY_DB_PUBLIC_PORT` for NAT/proxy topologies.
+
 ## [0.21.0] - 2026-07-05
 
 ### ✨ New Features

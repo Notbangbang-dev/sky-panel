@@ -35,6 +35,7 @@ const GROUPS: DocGroup[] = [
       { id: "eggs", label: "Eggs & auto-install" },
       { id: "files-sharing", label: "Files & sharing" },
       { id: "backups-schedules", label: "Backups & automations" },
+      { id: "databases", label: "Databases" },
       { id: "economy", label: "Coins, store & board" },
       { id: "api-keys", label: "API keys" },
     ],
@@ -267,6 +268,26 @@ export default function DocsPage() {
                 automatically start, stop, restart, kill or back up the server — or run a console command — on a fixed
                 interval, from every 30 minutes up to daily. Automations run on their own, even while you&apos;re away,
                 and can be paused, resumed or deleted at any time.
+              </p>
+            </Section>
+
+            <Section id="databases" title="Databases" kicker="Features">
+              <p>
+                Give users their own <strong>MariaDB databases</strong>, provisioned on the node that hosts their server.
+                Each server has a <strong>Databases</strong> tab: create one, and the panel generates a scoped database,
+                user and strong password and shows the full connection details (host, port, username, password and a
+                ready-to-paste JDBC URL). Databases count against a per-user quota bought from the store, and are dropped
+                automatically when the server is deleted.
+              </p>
+              <p>
+                Databases are off until an operator installs MariaDB on a node and points the daemon at it — see the{" "}
+                <a
+                  href="https://github.com/Notbangbang-dev/sky-panel/blob/main/docs/DATABASES.md"
+                  className="text-text underline decoration-text-muted/40 underline-offset-2 hover:decoration-signal"
+                >
+                  per-node MariaDB setup guide
+                </a>
+                .
               </p>
             </Section>
 

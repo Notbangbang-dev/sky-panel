@@ -7,7 +7,7 @@ import { QuotaMeters } from "../components/QuotaMeters";
 import { formatBytes } from "../lib/format";
 import type { StoreItem } from "../types/api";
 
-const DIMENSION_GLYPH: Record<string, string> = { memory: "▮", cpu: "◈", disk: "▤" };
+const DIMENSION_GLYPH: Record<string, string> = { memory: "▮", cpu: "◈", disk: "▤", databases: "▦" };
 
 export function StorePage() {
   const queryClient = useQueryClient();
@@ -92,6 +92,7 @@ export function StorePage() {
 
 function amountLabel(item: StoreItem): string {
   if (item.dimension === "cpu") return `+${item.amount}% CPU`;
+  if (item.dimension === "databases") return `+${item.amount} DB${item.amount === 1 ? "" : "s"}`;
   return `+${formatBytes(item.amount)}`;
 }
 

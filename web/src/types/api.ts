@@ -120,6 +120,7 @@ export interface QuotaDims {
   memory_bytes: number;
   cpu_percent: number;
   disk_bytes: number;
+  databases: number;
 }
 
 export interface QuotaUsage extends QuotaDims {
@@ -136,7 +137,7 @@ export interface AdminQuotaInfo extends QuotaInfo {
   bonus: QuotaDims;
 }
 
-export type StoreDimension = "memory" | "cpu" | "disk";
+export type StoreDimension = "memory" | "cpu" | "disk" | "databases";
 
 export interface StoreItem {
   id: string;
@@ -286,8 +287,21 @@ export interface PublicServerStatus {
   mem_limit_bytes: number;
 }
 
-export const PERMISSIONS = ["console", "files", "power", "settings"] as const;
+export const PERMISSIONS = ["console", "files", "power", "settings", "databases"] as const;
 export type Permission = (typeof PERMISSIONS)[number];
+
+export interface Database {
+  id: string;
+  owner_id: string;
+  server_id: string;
+  node_id: string;
+  name: string;
+  username: string;
+  password: string;
+  host: string;
+  port: number;
+  created_at: string;
+}
 
 export interface Subuser {
   user_id: string;

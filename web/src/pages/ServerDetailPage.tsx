@@ -14,6 +14,7 @@ import { BackupsTab } from "../components/server/BackupsTab";
 import { SchedulesTab } from "../components/server/SchedulesTab";
 import { ModrinthTab } from "../components/server/ModrinthTab";
 import { PlayersTab } from "../components/server/PlayersTab";
+import { DatabasesTab } from "../components/server/DatabasesTab";
 import { formatBytes, formatCpu } from "../lib/format";
 import { copyText } from "../lib/clipboard";
 import type { ContainerHeartbeat } from "../types/api";
@@ -24,7 +25,7 @@ interface ConsoleLine {
   message: string;
 }
 
-const TABS = ["Console", "Players", "Files", "Mods", "Backups", "Schedules", "Activity", "Settings", "Sharing"] as const;
+const TABS = ["Console", "Players", "Files", "Mods", "Backups", "Databases", "Schedules", "Activity", "Settings", "Sharing"] as const;
 type Tab = (typeof TABS)[number];
 
 export function ServerDetailPage() {
@@ -336,6 +337,7 @@ export function ServerDetailPage() {
       {tab === "Files" && <FilesTab serverId={id!} />}
       {tab === "Mods" && <ModrinthTab serverId={id!} />}
       {tab === "Backups" && <BackupsTab serverId={id!} />}
+      {tab === "Databases" && <DatabasesTab serverId={id!} />}
       {tab === "Schedules" && canManage && <SchedulesTab serverId={id!} />}
       {tab === "Activity" && <ActivityTab serverId={id!} />}
       {tab === "Settings" && canManage && <SettingsTab server={server} />}

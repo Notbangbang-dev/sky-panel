@@ -15,9 +15,10 @@ import (
 
 // Dimension names the quota a store item raises.
 const (
-	DimensionMemory = "memory"
-	DimensionCPU    = "cpu"
-	DimensionDisk   = "disk"
+	DimensionMemory    = "memory"
+	DimensionCPU       = "cpu"
+	DimensionDisk      = "disk"
+	DimensionDatabases = "databases"
 )
 
 // Item is one purchasable quota pack. Amount is in bytes for memory/disk and
@@ -45,6 +46,8 @@ var Catalog = []Item{
 	{ID: "cpu-100", Name: "+100% CPU", Description: "Add a full core to your CPU quota, permanently.", Dimension: DimensionCPU, Amount: 100, Price: 550},
 	{ID: "disk-5", Name: "+5 GB disk", Description: "Add 5 GB to your disk quota, permanently.", Dimension: DimensionDisk, Amount: 5 * gb, Price: 200},
 	{ID: "disk-10", Name: "+10 GB disk", Description: "Add 10 GB to your disk quota, permanently.", Dimension: DimensionDisk, Amount: 10 * gb, Price: 350},
+	{ID: "db-1", Name: "+1 Database", Description: "Unlock one MariaDB database slot, permanently.", Dimension: DimensionDatabases, Amount: 1, Price: 300},
+	{ID: "db-3", Name: "+3 Databases", Description: "Unlock three MariaDB database slots, permanently.", Dimension: DimensionDatabases, Amount: 3, Price: 750},
 }
 
 // ErrItemNotFound is returned when a purchase names an item not in the catalog.
@@ -92,6 +95,8 @@ func (s *Service) Purchase(userID, itemID string) (item Item, balance int64, err
 		grantErr = s.Quotas.Add(userID, 0, int(item.Amount), 0)
 	case DimensionDisk:
 		grantErr = s.Quotas.Add(userID, 0, 0, item.Amount)
+	case DimensionDatabases:
+		grantErr = s.Quotas.AddDatabases(userID, int(item.Amount))
 	default:
 		// A catalog item with an unknown dimension would otherwise debit the
 		// coins and grant nothing — refuse so the refund path runs.

@@ -30,6 +30,9 @@ type CommandSender interface {
 	// capability, so we never send that command to an older daemon that would
 	// fail to decode it (and drop the connection).
 	SupportsPullImage(nodeID string) bool
+	// SupportsDatabases reports whether a node can provision databases
+	// (daemon v0.5.0+ with MariaDB configured).
+	SupportsDatabases(nodeID string) bool
 }
 
 const (
@@ -55,6 +58,9 @@ type Service struct {
 	// keyed by server ID (e.g. the agent hub's player roster) can drop it
 	// immediately rather than waiting for a TTL sweep. Optional.
 	OnServerDeleted func(serverID string)
+	// Databases is optional; when set, a server's databases are dropped on its
+	// node when the server is deleted (the rows CASCADE with the server).
+	Databases *repo.Databases
 }
 
 func NewService(servers *repo.Servers, eggs *repo.Eggs, nodes *repo.Nodes, allocations *repo.Allocations, hub CommandSender) *Service {
@@ -437,6 +443,17 @@ func (s *Service) DeleteServer(serverID string) error {
 	// Best-effort: if the node is offline the container is gone anyway from
 	// the panel's point of view, so proceed with cleanup regardless.
 	_, _ = s.dispatch(server.NodeID, agenthub.ActionRemove, serverID, nil)
+
+	// Drop any databases on the node before the rows CASCADE away with the
+	// server. Best-effort — an offline node just leaves them, and the panel
+	// rows go regardless so they won't reappear.
+	if s.Databases != nil {
+		if dbs, err := s.Databases.ListByServer(serverID); err == nil {
+			for _, d := range dbs {
+				_ = s.DeleteDatabase(d.NodeID, d.Name, d.Username)
+			}
+		}
+	}
 
 	if err := s.Allocations.ReleaseByServerID(serverID); err != nil {
 		return fmt.Errorf("release allocation: %w", err)

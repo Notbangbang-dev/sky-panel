@@ -43,6 +43,12 @@ type HelloPayload struct {
 // pull_image to nodes that advertise it, so older daemons keep working.
 const CapPullImage = "pull_image"
 
+// CapDatabases is advertised by a daemon (v0.5.0+) that understands the
+// create_database/delete_database commands and has a MariaDB admin connection
+// configured. The panel gates the databases feature on this so it can give a
+// clean error on nodes that can't provision databases.
+const CapDatabases = "databases"
+
 type ContainerHeartbeat struct {
 	ServerID string  `json:"server_id"`
 	Running  bool    `json:"running"`
@@ -89,6 +95,9 @@ const (
 	ActionListBackups   = "list_backups"
 	ActionRestoreBackup = "restore_backup"
 	ActionDeleteBackup  = "delete_backup"
+
+	ActionCreateDatabase = "create_database"
+	ActionDeleteDatabase = "delete_database"
 )
 
 type PortBinding struct {
@@ -120,6 +129,10 @@ type CommandPayload struct {
 	Path          string         `json:"path,omitempty"`
 	NewPath       string         `json:"new_path,omitempty"`
 	ContentBase64 string         `json:"content_base64,omitempty"`
+	// create_database / delete_database: the panel-generated identifiers.
+	DatabaseName     string `json:"database_name,omitempty"`
+	DatabaseUser     string `json:"database_user,omitempty"`
+	DatabasePassword string `json:"database_password,omitempty"`
 }
 
 type AckPayload struct {
@@ -159,6 +172,14 @@ type BackupResult struct {
 
 type ListBackupsResult struct {
 	Backups []BackupEntry `json:"backups"`
+}
+
+// CreateDatabaseResult is the node-specific connection endpoint returned from a
+// create_database command. The panel already holds the name/user/password it
+// generated and sent.
+type CreateDatabaseResult struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
 }
 
 // EncodeSigned builds and signs a new envelope carrying payload, using
