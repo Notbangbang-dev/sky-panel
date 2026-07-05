@@ -26,6 +26,12 @@ export function SettingsTab({ server }: { server: Server }) {
     },
   });
 
+  const togglePublic = useMutation({
+    mutationFn: (isPublic: boolean) => serversApi.setPublicStatus(server.id, isPublic),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["servers", server.id] }),
+  });
+  const statusUrl = `${window.location.origin}/status/${server.id}`;
+
   const save = useMutation({
     mutationFn: () =>
       serversApi.update(server.id, {
@@ -64,6 +70,25 @@ export function SettingsTab({ server }: { server: Server }) {
           </button>
           {descSaved && <span className="sp-mono" style={{ fontSize: 12, color: "var(--sp-accent)" }}>Saved — no restart needed.</span>}
         </div>
+      </div>
+
+      <div className="sp-surface sp-card" style={{ maxWidth: 480, marginBottom: 16 }}>
+        <label className="sp-mono" style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={server.public_status}
+            disabled={togglePublic.isPending}
+            onChange={(e) => togglePublic.mutate(e.target.checked)}
+          />
+          Public status page — a shareable link showing this server's online status, players and version
+        </label>
+        {server.public_status && (
+          <p className="sp-mono" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+            <a href={statusUrl} target="_blank" rel="noreferrer" style={{ color: "var(--sp-accent)" }}>
+              {statusUrl}
+            </a>
+          </p>
+        )}
       </div>
 
       <form

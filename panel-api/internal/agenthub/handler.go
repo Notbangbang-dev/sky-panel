@@ -57,6 +57,8 @@ type Handler struct {
 	Nodes    NodeLookup
 	Sink     EventSink
 	stats    *statsCache
+	players  *playerTracker
+	owners   *ownerCache
 	// OnNodeConnected, if set, is invoked (in its own goroutine) each time a
 	// node finishes its hello handshake — used to warm the node's image cache.
 	// Optional so the handler stays testable without pulling in serversvc.
@@ -66,13 +68,35 @@ type Handler struct {
 func NewHandler(registry *Registry, nodes NodeLookup, sink EventSink) *Handler {
 	stats := newStatsCache()
 	go stats.sweepLoop()
-	return &Handler{Registry: registry, Nodes: nodes, Sink: sink, stats: stats}
+	players := newPlayerTracker()
+	go players.sweepLoop()
+	return &Handler{Registry: registry, Nodes: nodes, Sink: sink, stats: stats, players: players, owners: newOwnerCache(nil)}
+}
+
+// UseServerLocator enables cross-node authorization: reported events and
+// heartbeats are dropped unless the connecting node actually hosts the server
+// they reference. Called by main once the servers repo is available; without it
+// the check is disabled (unit tests).
+func (h *Handler) UseServerLocator(locate ServerLocator) {
+	h.owners = newOwnerCache(locate)
+}
+
+// Forget drops a server's tracked roster immediately (e.g. on deletion).
+func (h *Handler) Forget(serverID string) {
+	if h.players != nil {
+		h.players.forget(serverID)
+	}
 }
 
 // LatestStats returns the most recent (and still fresh) heartbeat JSON for a
 // server, so an HTTP caller can seed the UI without waiting for a WS push.
 func (h *Handler) LatestStats(serverID string) ([]byte, bool) {
 	return h.stats.get(serverID)
+}
+
+// Players returns the live roster (and version) tracked from the console stream.
+func (h *Handler) Players(serverID string) PlayerInfo {
+	return h.players.get(serverID)
 }
 
 // ServeWS accepts a node's inbound connection. The HTTP layer itself
@@ -167,22 +191,27 @@ func (h *Handler) readLoop(conn *Conn, ws *websocket.Conn, secret []byte) {
 			if err := json.Unmarshal(env.Payload, &hb); err != nil {
 				log.Printf("agenthub: node %s sent an undecodable heartbeat: %v", conn.NodeID, err)
 			} else {
-				h.forwardHeartbeat(hb)
+				h.forwardHeartbeat(conn.NodeID, hb)
 			}
 
 		case TypeEvent:
 			var ev EventPayload
 			if json.Unmarshal(env.Payload, &ev) == nil {
-				h.forwardEvent(ev)
+				h.forwardEvent(conn.NodeID, ev)
 			}
 		}
 	}
 }
 
-func (h *Handler) forwardHeartbeat(hb HeartbeatPayload) {
+func (h *Handler) forwardHeartbeat(nodeID string, hb HeartbeatPayload) {
 	for _, c := range hb.Containers {
 		if c.ServerID == "" {
 			// Would publish to "server::stats", which no client subscribes to.
+			continue
+		}
+		// Drop stats for servers this node doesn't host, so a compromised node
+		// can't poison another server's cached metrics.
+		if !h.owners.ownedBy(c.ServerID, nodeID) {
 			continue
 		}
 		msg, err := json.Marshal(c)
@@ -196,7 +225,16 @@ func (h *Handler) forwardHeartbeat(hb HeartbeatPayload) {
 	}
 }
 
-func (h *Handler) forwardEvent(ev EventPayload) {
+func (h *Handler) forwardEvent(nodeID string, ev EventPayload) {
+	// Drop events for servers this node doesn't host, so a compromised node
+	// can't corrupt another server's roster or spoof its console/state stream.
+	if !h.owners.ownedBy(ev.ServerID, nodeID) {
+		log.Printf("agenthub: node %s reported an event for server %s it does not host; dropping", nodeID, ev.ServerID)
+		return
+	}
+	if h.players != nil {
+		h.players.observe(ev)
+	}
 	msg, err := json.Marshal(ev)
 	if err != nil {
 		return

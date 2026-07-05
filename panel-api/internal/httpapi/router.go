@@ -38,6 +38,7 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/registration-status", d.RegistrationStatus)
 			r.Get("/appearance", d.PublicAppearance)
 			r.Get("/maintenance", d.MaintenanceStatus)
+			r.Get("/status/{serverID}", d.PublicServerStatus)
 		})
 
 		r.Group(func(r chi.Router) {
@@ -78,6 +79,8 @@ func NewRouter(d Deps) http.Handler {
 				r.Put("/{serverID}/description", d.SetServerDescription)
 				r.Post("/{serverID}/console", d.ConsoleInput)
 				r.Get("/{serverID}/stats", d.ServerStats)
+				r.Get("/{serverID}/players", d.ServerPlayers)
+				r.Put("/{serverID}/public-status", d.SetServerPublicStatus)
 				r.Get("/{serverID}/activity", d.ServerActivity)
 
 				r.Get("/{serverID}/backups", d.ListBackups)

@@ -9,6 +9,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { BroadcastBanner } from "./components/BroadcastBanner";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { StatusPage } from "./pages/StatusPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ServersListPage } from "./pages/ServersListPage";
 import { ServerDetailPage } from "./pages/ServerDetailPage";
@@ -55,6 +56,7 @@ function App() {
               <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/status/:id" element={<StatusPage />} />
 
             <Route path="/" element={<Shell><DashboardPage /></Shell>} />
             <Route path="/servers" element={<Shell><ServersListPage /></Shell>} />

@@ -51,6 +51,10 @@ type Service struct {
 	Nodes       *repo.Nodes
 	Allocations *repo.Allocations
 	Hub         CommandSender
+	// OnServerDeleted, if set, is called after a server is deleted so caches
+	// keyed by server ID (e.g. the agent hub's player roster) can drop it
+	// immediately rather than waiting for a TTL sweep. Optional.
+	OnServerDeleted func(serverID string)
 }
 
 func NewService(servers *repo.Servers, eggs *repo.Eggs, nodes *repo.Nodes, allocations *repo.Allocations, hub CommandSender) *Service {
@@ -437,7 +441,13 @@ func (s *Service) DeleteServer(serverID string) error {
 	if err := s.Allocations.ReleaseByServerID(serverID); err != nil {
 		return fmt.Errorf("release allocation: %w", err)
 	}
-	return s.Servers.Delete(serverID)
+	if err := s.Servers.Delete(serverID); err != nil {
+		return err
+	}
+	if s.OnServerDeleted != nil {
+		s.OnServerDeleted(serverID)
+	}
+	return nil
 }
 
 // Backup dispatches a backup command and, on success, records the time so

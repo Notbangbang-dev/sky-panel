@@ -17,7 +17,7 @@ func NewServers(db *sql.DB) *Servers {
 	return &Servers{db: db}
 }
 
-const serverColumns = `id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, disk_bytes, variables_json, primary_port, backup_interval_hours, last_backup_at, suspended, status_message, description, created_at, updated_at`
+const serverColumns = `id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, disk_bytes, variables_json, primary_port, backup_interval_hours, last_backup_at, suspended, status_message, description, public_status, created_at, updated_at`
 
 func (r *Servers) Create(s *models.Server) error {
 	varsJSON, err := json.Marshal(s.Variables)
@@ -25,9 +25,9 @@ func (r *Servers) Create(s *models.Server) error {
 		return err
 	}
 	_, err = r.db.Exec(
-		`INSERT INTO servers (id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, disk_bytes, variables_json, primary_port, backup_interval_hours, last_backup_at, suspended, status_message, description, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.ID, s.OwnerID, s.NodeID, s.EggID, s.Name, s.ContainerID, string(s.Status), s.MemoryBytes, s.CPULimit, s.DiskBytes, varsJSON, s.PrimaryPort, s.BackupIntervalHours, s.LastBackupAt, s.Suspended, s.StatusMessage, s.Description, s.CreatedAt, s.UpdatedAt,
+		`INSERT INTO servers (id, owner_id, node_id, egg_id, name, container_id, status, memory_bytes, cpu_limit, disk_bytes, variables_json, primary_port, backup_interval_hours, last_backup_at, suspended, status_message, description, public_status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.OwnerID, s.NodeID, s.EggID, s.Name, s.ContainerID, string(s.Status), s.MemoryBytes, s.CPULimit, s.DiskBytes, varsJSON, s.PrimaryPort, s.BackupIntervalHours, s.LastBackupAt, s.Suspended, s.StatusMessage, s.Description, s.PublicStatus, s.CreatedAt, s.UpdatedAt,
 	)
 	return err
 }
@@ -35,6 +35,17 @@ func (r *Servers) Create(s *models.Server) error {
 func (r *Servers) GetByID(id string) (*models.Server, error) {
 	row := r.db.QueryRow(`SELECT `+serverColumns+` FROM servers WHERE id = ?`, id)
 	return scanServer(row)
+}
+
+// NodeIDForServer returns the node currently hosting a server. It's a cheap
+// single-column lookup used by the agent hub to verify that a node only reports
+// events/heartbeats for servers it actually hosts. ok is false when the server
+// doesn't exist (or on any query error), so callers fail closed.
+func (r *Servers) NodeIDForServer(id string) (nodeID string, ok bool) {
+	if err := r.db.QueryRow(`SELECT node_id FROM servers WHERE id = ?`, id).Scan(&nodeID); err != nil {
+		return "", false
+	}
+	return nodeID, true
 }
 
 func (r *Servers) ListByOwner(ownerID string) ([]*models.Server, error) {
@@ -99,6 +110,12 @@ func (r *Servers) SetError(id, message string) error {
 // SetDescription updates a server's free-text note (no re-provision).
 func (r *Servers) SetDescription(id, description string) error {
 	res, err := r.db.Exec(`UPDATE servers SET description = ?, updated_at = ? WHERE id = ?`, description, time.Now().UTC(), id)
+	return checkRowsAffected(res, err)
+}
+
+// SetPublicStatus toggles whether the server's public status page is exposed.
+func (r *Servers) SetPublicStatus(id string, public bool) error {
+	res, err := r.db.Exec(`UPDATE servers SET public_status = ?, updated_at = ? WHERE id = ?`, public, time.Now().UTC(), id)
 	return checkRowsAffected(res, err)
 }
 
@@ -179,7 +196,7 @@ func scanServerRow(row rowScanner) (*models.Server, error) {
 	var status, varsJSON string
 	var lastBackup sql.NullTime
 
-	if err := row.Scan(&s.ID, &s.OwnerID, &s.NodeID, &s.EggID, &s.Name, &s.ContainerID, &status, &s.MemoryBytes, &s.CPULimit, &s.DiskBytes, &varsJSON, &s.PrimaryPort, &s.BackupIntervalHours, &lastBackup, &s.Suspended, &s.StatusMessage, &s.Description, &s.CreatedAt, &s.UpdatedAt); err != nil {
+	if err := row.Scan(&s.ID, &s.OwnerID, &s.NodeID, &s.EggID, &s.Name, &s.ContainerID, &status, &s.MemoryBytes, &s.CPULimit, &s.DiskBytes, &varsJSON, &s.PrimaryPort, &s.BackupIntervalHours, &lastBackup, &s.Suspended, &s.StatusMessage, &s.Description, &s.PublicStatus, &s.CreatedAt, &s.UpdatedAt); err != nil {
 		return nil, err
 	}
 

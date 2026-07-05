@@ -4,6 +4,8 @@ import type {
   AdminAnalytics,
   ModrinthSearchResult,
   ModrinthVersion,
+  PlayerInfo,
+  PublicServerStatus,
   AdminQuotaInfo,
   AdminServer,
   Allocation,
@@ -74,6 +76,8 @@ export const publicApi = {
     }),
   maintenance: () =>
     apiRequest<{ enabled: boolean; message: string }>("/api/v1/public/maintenance", { auth: false }),
+  serverStatus: (id: string) =>
+    apiRequest<PublicServerStatus>(`/api/v1/public/status/${id}`, { auth: false }),
 };
 
 export const modrinthApi = {
@@ -144,6 +148,9 @@ export const serversApi = {
   // TanStack Query rejects a query that resolves to undefined.
   stats: (id: string) =>
     apiRequest<ContainerHeartbeat | null>(`/api/v1/servers/${id}/stats`).then((v) => v ?? null),
+  players: (id: string) => apiRequest<PlayerInfo>(`/api/v1/servers/${id}/players`),
+  setPublicStatus: (id: string, isPublic: boolean) =>
+    apiRequest<void>(`/api/v1/servers/${id}/public-status`, { method: "PUT", body: { public: isPublic } }),
   setDescription: (id: string, description: string) =>
     apiRequest<void>(`/api/v1/servers/${id}/description`, { method: "PUT", body: { description } }),
   clone: (id: string) => apiRequest<Server>(`/api/v1/servers/${id}/clone`, { method: "POST" }),

@@ -50,10 +50,16 @@ func main() {
 
 	agentRegistry := agenthub.NewRegistry()
 	agentHandler := agenthub.NewHandler(agentRegistry, nodes, hub)
+	// Only accept events/heartbeats from the node that actually hosts the
+	// referenced server, so one compromised node can't corrupt another's
+	// roster/stats/console stream.
+	agentHandler.UseServerLocator(servers)
 	serverSvc := serversvc.NewService(servers, eggs, nodes, allocations, agentRegistry)
 	// Warm each node's Docker image cache as soon as it connects, so the first
 	// server create on it is fast instead of blocking on a cold image pull.
 	agentHandler.OnNodeConnected = serverSvc.WarmImagesOnNode
+	// Drop a deleted server's tracked roster immediately.
+	serverSvc.OnServerDeleted = agentHandler.Forget
 
 	deps := httpapi.Deps{
 		Users:         users,

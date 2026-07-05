@@ -81,6 +81,7 @@ export interface Server {
   suspended: boolean;
   status_message?: string;
   description: string;
+  public_status: boolean;
 }
 
 export interface AdminServer extends Server {
@@ -265,6 +266,24 @@ export interface ModrinthVersion {
   game_versions: string[];
   loaders: string[];
   files: ModrinthVersionFile[];
+}
+
+export interface PlayerInfo {
+  players: string[];
+  max: number;
+  version: string;
+}
+
+export interface PublicServerStatus {
+  name: string;
+  online: boolean;
+  players: string[];
+  player_count: number;
+  max_players: number;
+  version: string;
+  cpu_percent: number;
+  mem_used_bytes: number;
+  mem_limit_bytes: number;
 }
 
 export const PERMISSIONS = ["console", "files", "power", "settings"] as const;

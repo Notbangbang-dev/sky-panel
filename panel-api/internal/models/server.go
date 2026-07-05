@@ -39,8 +39,11 @@ type Server struct {
 	StatusMessage string
 	// Description is a free-text note the owner can attach to the server.
 	Description string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// PublicStatus, when true, exposes a read-only public status page for this
+	// server at /status/<id> (name, up/down, players, version).
+	PublicStatus bool
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 type Allocation struct {

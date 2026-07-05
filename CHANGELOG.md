@@ -2,6 +2,17 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.21.0] - 2026-07-05
+
+### ✨ New Features
+
+- **Player management.** A new **Players** tab on each server shows the live roster (parsed from the server's console), the online count / slots, and the running version — with one-click **Kick** and **Ban**. The panel tracks joins/leaves server-side, so it's the same data everywhere.
+- **Public status page.** Flip on **Settings → Public status page** to get a shareable, no-login `/status/<id>` link showing whether the server is online, who's playing, the version, and live CPU/memory — perfect for posting in your community. Off by default; servers that haven't opted in return 404 so the link can't be used to probe for servers.
+
+### 🔒 Hardening
+
+An adversarial audit of the new player tracking fixed: console-line parsing now anchors on the real log prefix and validates usernames, so a player can't spoof or wipe the roster (or the public status page) by typing crafted chat; the roster cache is reclaimed on server deletion and swept for stale entries so it can't grow without bound; and the agent hub now only accepts events/heartbeats from the node that actually hosts the referenced server, so one compromised node can't corrupt another server's roster, stats, or console stream.
+
 ## [0.20.0] - 2026-07-04
 
 ### ✨ New Features

@@ -41,6 +41,7 @@ type serverResponse struct {
 	Suspended           bool              `json:"suspended"`
 	StatusMessage       string            `json:"status_message,omitempty"`
 	Description         string            `json:"description"`
+	PublicStatus        bool              `json:"public_status"`
 }
 
 func toServerResponse(s *models.Server) serverResponse {
@@ -49,6 +50,7 @@ func toServerResponse(s *models.Server) serverResponse {
 		Status: string(s.Status), MemoryBytes: s.MemoryBytes, CPULimit: s.CPULimit, DiskBytes: s.DiskBytes,
 		PrimaryPort: s.PrimaryPort, Variables: s.Variables, BackupIntervalHours: s.BackupIntervalHours,
 		Suspended: s.Suspended, StatusMessage: s.StatusMessage, Description: s.Description,
+		PublicStatus: s.PublicStatus,
 	}
 	if s.LastBackupAt != nil {
 		resp.LastBackupAt = s.LastBackupAt.Format(rfc3339)
@@ -125,6 +127,16 @@ func (d Deps) ServerStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(msg)
+}
+
+// ServerPlayers returns the live player roster (and version) the panel has
+// tracked from this server's console output.
+func (d Deps) ServerPlayers(w http.ResponseWriter, r *http.Request) {
+	server := d.loadServerWithPermission(w, r, "")
+	if server == nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, d.AgentHub.Players(server.ID))
 }
 
 func (d Deps) ListServers(w http.ResponseWriter, r *http.Request) {
