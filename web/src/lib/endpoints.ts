@@ -9,6 +9,7 @@ import type {
   AdminQuotaInfo,
   AdminServer,
   Allocation,
+  ServerAllocations,
   ApiKey,
   AuditEntry,
   BackupEntry,
@@ -301,6 +302,18 @@ export const adminApi = {
     apiRequest<{ created: number }>(`/api/v1/admin/nodes/${nodeId}/allocations`, { method: "POST", body }),
   deleteAllocation: (allocationId: string) =>
     apiRequest<void>(`/api/v1/admin/allocations/${allocationId}`, { method: "DELETE" }),
+
+  // Per-server port manager (admin-only). Additional ports beyond the primary
+  // are attached/detached here; each change recreates the container.
+  listServerAllocations: (serverId: string) =>
+    apiRequest<ServerAllocations>(`/api/v1/admin/servers/${serverId}/allocations`),
+  addServerAllocation: (serverId: string, allocationId: string) =>
+    apiRequest<ServerAllocations>(`/api/v1/admin/servers/${serverId}/allocations`, {
+      method: "POST",
+      body: { allocation_id: allocationId },
+    }),
+  removeServerAllocation: (serverId: string, allocationId: string) =>
+    apiRequest<void>(`/api/v1/admin/servers/${serverId}/allocations/${allocationId}`, { method: "DELETE" }),
 
   createEgg: (input: EggInput) => apiRequest<Egg>("/api/v1/admin/eggs", { method: "POST", body: input }),
   updateEgg: (id: string, input: EggInput) => apiRequest<Egg>(`/api/v1/admin/eggs/${id}`, { method: "PUT", body: input }),

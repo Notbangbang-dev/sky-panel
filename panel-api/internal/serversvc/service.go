@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,6 +69,14 @@ func NewService(servers *repo.Servers, eggs *repo.Eggs, nodes *repo.Nodes, alloc
 }
 
 var ErrCommandFailed = fmt.Errorf("node reported command failure")
+
+// ErrAllocationWrongNode is returned when an admin tries to attach an
+// allocation that lives on a different node than the server.
+var ErrAllocationWrongNode = fmt.Errorf("allocation belongs to a different node than the server")
+
+// ErrPrimaryAllocation is returned when trying to detach a server's primary
+// port; only additional ports can be removed.
+var ErrPrimaryAllocation = fmt.Errorf("cannot remove the server's primary port")
 
 // CreateServer provisions a new server: claims a free port on the node,
 // resolves the egg's startup command against the requested variables, and
@@ -178,6 +187,76 @@ func (s *Service) UpdateServer(serverID, name string, memoryBytes int64, cpuLimi
 	_ = s.Servers.SetStatus(serverID, models.StatusRunning)
 	server.Status = models.StatusRunning
 	return server, nil
+}
+
+// AddServerAllocation attaches an additional (admin-assigned) port to a server
+// and recreates its container so the new port is actually published + opened in
+// the node firewall. The allocation must be free and on the server's own node.
+// Errors: repo.ErrNotFound (no such allocation), repo.ErrAllocationInUse (held
+// by another server), ErrAllocationWrongNode.
+func (s *Service) AddServerAllocation(serverID, allocID string) error {
+	server, err := s.Servers.GetByID(serverID)
+	if err != nil {
+		return fmt.Errorf("load server: %w", err)
+	}
+	alloc, err := s.Allocations.GetByID(allocID)
+	if err != nil {
+		return err // ErrNotFound → clean 404 in the handler
+	}
+	if alloc.NodeID != server.NodeID {
+		return ErrAllocationWrongNode
+	}
+	if _, err := s.Allocations.ClaimSpecific(allocID, serverID); err != nil {
+		return err // ErrAllocationInUse / ErrNotFound
+	}
+	if err := s.reprovision(server); err != nil {
+		// The container never picked up the port; release the claim so the DB
+		// doesn't show a port attached to a server that isn't using it.
+		_ = s.Allocations.ReleaseOne(allocID, serverID)
+		return err
+	}
+	return nil
+}
+
+// RemoveServerAllocation detaches an additional port from a server and recreates
+// its container without it. The server's primary port can't be removed
+// (ErrPrimaryAllocation); the allocation must currently be held by this server
+// (repo.ErrNotFound otherwise).
+func (s *Service) RemoveServerAllocation(serverID, allocID string) error {
+	server, err := s.Servers.GetByID(serverID)
+	if err != nil {
+		return fmt.Errorf("load server: %w", err)
+	}
+	alloc, err := s.Allocations.GetByID(allocID)
+	if err != nil {
+		return err
+	}
+	if alloc.ServerID == nil || *alloc.ServerID != serverID {
+		return repo.ErrNotFound // not attached to this server
+	}
+	if alloc.Port == server.PrimaryPort {
+		return ErrPrimaryAllocation
+	}
+	if err := s.Allocations.ReleaseOne(allocID, serverID); err != nil {
+		return err
+	}
+	return s.reprovision(server)
+}
+
+// reprovision recreates a server's container from its current egg + allocations
+// (same mechanism as UpdateServer): provision's create step removes the
+// name-clashing container and recreates it, so the new port set takes effect
+// while the volume/data is preserved.
+func (s *Service) reprovision(server *models.Server) error {
+	egg, err := s.Eggs.GetByID(server.EggID)
+	if err != nil {
+		return fmt.Errorf("load egg: %w", err)
+	}
+	if err := s.provision(server, egg, defaultProvisionTimeout); err != nil {
+		_ = s.Servers.SetError(server.ID, err.Error())
+		return err
+	}
+	return s.Servers.SetStatus(server.ID, models.StatusRunning)
 }
 
 // ReinstallServer recreates the container from its egg, re-running the
@@ -372,12 +451,51 @@ func (s *Service) buildSpec(server *models.Server, egg *models.Egg) *agenthub.Co
 		resolved["MEMORY"] = fmt.Sprintf("%dM", mib)
 	}
 	resolved["SERVER_MEMORY"] = strconv.FormatInt(mib, 10)
-	resolved["SERVER_PORT"] = strconv.Itoa(server.PrimaryPort)
 	resolved["SERVER_UUID"] = server.ID
+
+	// Gather every port this server publishes: its primary, plus any additional
+	// allocations an admin attached (query/proxy/voice/dynmap/etc.). ListByServer
+	// is ordered by port; the primary is kept first, and the extras are exposed
+	// to the container as SERVER_ADDITIONAL_PORTS (comma-joined) and
+	// SERVER_PORT_1..n so eggs can reference them. A lookup miss degrades cleanly
+	// to just the primary.
+	ports := []int{server.PrimaryPort}
+	var extras []int
+	if s.Allocations != nil {
+		if held, err := s.Allocations.ListByServer(server.ID); err == nil {
+			for _, a := range held {
+				if a.Port != server.PrimaryPort {
+					extras = append(extras, a.Port)
+				}
+			}
+		}
+	}
+	ports = append(ports, extras...)
+
+	resolved["SERVER_PORT"] = strconv.Itoa(server.PrimaryPort)
+	if len(extras) > 0 {
+		strs := make([]string, len(extras))
+		for i, p := range extras {
+			strs[i] = strconv.Itoa(p)
+			resolved[fmt.Sprintf("SERVER_PORT_%d", i+1)] = strconv.Itoa(p)
+		}
+		resolved["SERVER_ADDITIONAL_PORTS"] = strings.Join(strs, ",")
+	}
 
 	env := make([]string, 0, len(resolved))
 	for k, v := range resolved {
 		env = append(env, k+"="+v)
+	}
+
+	// tcp + udp binding for every published port. Built with make (not a
+	// literal) so the slice is never nil — a nil slice marshals to JSON null,
+	// which the daemon can't decode into a list.
+	portBindings := make([]agenthub.PortBinding, 0, len(ports)*2)
+	for _, p := range ports {
+		portBindings = append(portBindings,
+			agenthub.PortBinding{ContainerPort: fmt.Sprintf("%d/tcp", p), HostPort: strconv.Itoa(p)},
+			agenthub.PortBinding{ContainerPort: fmt.Sprintf("%d/udp", p), HostPort: strconv.Itoa(p)},
+		)
 	}
 
 	// CPU limit is a percentage of one core; Docker wants nano-CPUs
@@ -401,13 +519,10 @@ func (s *Service) buildSpec(server *models.Server, egg *models.Egg) *agenthub.Co
 		Env:         env,
 		WorkingDir:  "/home/container",
 		Binds:       []string{fmt.Sprintf("/srv/sky-panel/volumes/%s:/home/container", server.ID)},
-		MemoryBytes: server.MemoryBytes,
-		NanoCPUs:    nanoCPUs,
-		PortBindings: []agenthub.PortBinding{
-			{ContainerPort: fmt.Sprintf("%d/tcp", server.PrimaryPort), HostPort: strconv.Itoa(server.PrimaryPort)},
-			{ContainerPort: fmt.Sprintf("%d/udp", server.PrimaryPort), HostPort: strconv.Itoa(server.PrimaryPort)},
-		},
-		Labels: map[string]string{"sky-panel.server_id": server.ID},
+		MemoryBytes:  server.MemoryBytes,
+		NanoCPUs:     nanoCPUs,
+		PortBindings: portBindings,
+		Labels:       map[string]string{"sky-panel.server_id": server.ID},
 	}
 }
 

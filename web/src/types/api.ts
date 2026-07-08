@@ -44,6 +44,21 @@ export interface Allocation {
   server_name?: string;
 }
 
+// A port a server holds, as returned by the admin server-allocations endpoint.
+// `primary` marks the main port, which can't be removed.
+export interface ServerPort {
+  id: string;
+  port: number;
+  primary: boolean;
+}
+
+// A server's ports plus the free ports available on its node (for the admin
+// "add port" dropdown) — one round-trip powers the whole Ports manager.
+export interface ServerAllocations {
+  ports: ServerPort[];
+  free: { id: string; port: number }[];
+}
+
 export interface EggVariable {
   name: string;
   env: string;
@@ -75,6 +90,9 @@ export interface Server {
   cpu_limit: number;
   disk_bytes: number;
   primary_port: number;
+  // Extra admin-assigned ports beyond the primary. Present only on the
+  // single-server GET; omitted (undefined) in list responses.
+  additional_ports?: number[];
   variables: Record<string, string>;
   backup_interval_hours: number;
   last_backup_at?: string;

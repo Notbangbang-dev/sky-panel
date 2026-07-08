@@ -188,6 +188,12 @@ export function ServerDetailPage() {
                 {node.name}
               </span>
             )}
+            {server.additional_ports && server.additional_ports.length > 0 && (
+              <span className="sp-spec">
+                <span className="sp-spec__k">ports</span>
+                <span className="sp-mono">{server.additional_ports.join(", ")}</span>
+              </span>
+            )}
           </div>
 
           {server.description && (

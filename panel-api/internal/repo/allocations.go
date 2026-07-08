@@ -131,6 +131,97 @@ func (r *Allocations) ReleaseByServerID(serverID string) error {
 	return err
 }
 
+// GetByID returns a single allocation, or ErrNotFound. Used to validate an
+// allocation (node match, free/in-use) before attaching it to a server.
+func (r *Allocations) GetByID(id string) (*models.Allocation, error) {
+	var a models.Allocation
+	var serverID sql.NullString
+	err := r.db.QueryRow(`SELECT id, node_id, port, server_id FROM allocations WHERE id = ?`, id).
+		Scan(&a.ID, &a.NodeID, &a.Port, &serverID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if serverID.Valid {
+		a.ServerID = &serverID.String
+	}
+	return &a, nil
+}
+
+// ClaimSpecific atomically claims one *specific* free allocation for serverID
+// (used to attach an additional port to an existing server) and returns the
+// port it claimed. Unlike ClaimFree it targets a chosen row: ErrNotFound if it
+// doesn't exist, ErrAllocationInUse if another server already holds it. The
+// conditional UPDATE + disambiguation run in one transaction so a concurrent
+// claim can't slip in between the check and the write.
+func (r *Allocations) ClaimSpecific(allocID, serverID string) (port int, err error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec(`UPDATE allocations SET server_id = ? WHERE id = ? AND server_id IS NULL`, serverID, allocID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if n == 0 {
+		// Nothing updated: the row is missing, or it's already in use.
+		var existing sql.NullString
+		err := tx.QueryRow(`SELECT server_id FROM allocations WHERE id = ?`, allocID).Scan(&existing)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrNotFound
+		}
+		if err != nil {
+			return 0, err
+		}
+		return 0, ErrAllocationInUse
+	}
+
+	if err := tx.QueryRow(`SELECT port FROM allocations WHERE id = ?`, allocID).Scan(&port); err != nil {
+		return 0, err
+	}
+	return port, tx.Commit()
+}
+
+// ReleaseOne frees a single allocation, but only if serverID currently holds
+// it — used to detach an additional port. It's a no-op (nil error) if the row
+// isn't held by that server, so a stale request can't free someone else's port.
+func (r *Allocations) ReleaseOne(allocID, serverID string) error {
+	_, err := r.db.Exec(`UPDATE allocations SET server_id = NULL WHERE id = ? AND server_id = ?`, allocID, serverID)
+	return err
+}
+
+// ListByServer returns every allocation a server holds (its primary plus any
+// additional ports), ordered by port.
+func (r *Allocations) ListByServer(serverID string) ([]*models.Allocation, error) {
+	rows, err := r.db.Query(`SELECT id, node_id, port, server_id FROM allocations WHERE server_id = ? ORDER BY port`, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*models.Allocation
+	for rows.Next() {
+		var a models.Allocation
+		var serverID sql.NullString
+		if err := rows.Scan(&a.ID, &a.NodeID, &a.Port, &serverID); err != nil {
+			return nil, err
+		}
+		if serverID.Valid {
+			a.ServerID = &serverID.String
+		}
+		out = append(out, &a)
+	}
+	return out, rows.Err()
+}
+
 func (r *Allocations) ListByNode(nodeID string) ([]*models.Allocation, error) {
 	rows, err := r.db.Query(`SELECT id, node_id, port, server_id FROM allocations WHERE node_id = ? ORDER BY port`, nodeID)
 	if err != nil {

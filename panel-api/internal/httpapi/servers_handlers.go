@@ -35,6 +35,10 @@ type serverResponse struct {
 	CPULimit            int               `json:"cpu_limit"`
 	DiskBytes           int64             `json:"disk_bytes"`
 	PrimaryPort         int               `json:"primary_port"`
+	// AdditionalPorts lists the extra (admin-assigned) ports a server holds,
+	// beyond its primary. Populated only on the single-server GET (omitted from
+	// list responses to avoid a per-row allocation query).
+	AdditionalPorts     []int             `json:"additional_ports,omitempty"`
 	Variables           map[string]string `json:"variables"`
 	BackupIntervalHours int               `json:"backup_interval_hours"`
 	LastBackupAt        string            `json:"last_backup_at,omitempty"`
@@ -237,7 +241,18 @@ func (d Deps) GetServer(w http.ResponseWriter, r *http.Request) {
 	if server == nil {
 		return
 	}
-	writeJSON(w, http.StatusOK, toServerResponse(server))
+	resp := toServerResponse(server)
+	// Surface any admin-assigned additional ports so the owner can see (but not
+	// edit) them on the server detail page. Best-effort: a lookup miss just
+	// omits the field.
+	if held, err := d.Allocations.ListByServer(server.ID); err == nil {
+		for _, a := range held {
+			if a.Port != server.PrimaryPort {
+				resp.AdditionalPorts = append(resp.AdditionalPorts, a.Port)
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (d Deps) DeleteServer(w http.ResponseWriter, r *http.Request) {

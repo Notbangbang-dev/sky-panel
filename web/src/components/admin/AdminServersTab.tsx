@@ -5,6 +5,7 @@ import { adminApi } from "../../lib/endpoints";
 import { ApiError } from "../../lib/api";
 import { StatusBadge } from "../StatusBadge";
 import { formatBytes } from "../../lib/format";
+import { ServerPortsPanel } from "./ServerPortsPanel";
 
 export function AdminServersTab() {
   const queryClient = useQueryClient();
@@ -12,6 +13,7 @@ export function AdminServersTab() {
   const { data: users } = useQuery({ queryKey: ["admin", "users"], queryFn: adminApi.listUsers });
 
   const [transferId, setTransferId] = useState<string | null>(null);
+  const [portsId, setPortsId] = useState<string | null>(null);
   const [targetOwner, setTargetOwner] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
@@ -198,6 +200,12 @@ export function AdminServersTab() {
                   </button>
                   <button
                     className="sp-btn sp-btn--sm"
+                    onClick={() => setPortsId((cur) => (cur === s.id ? null : s.id))}
+                  >
+                    Ports
+                  </button>
+                  <button
+                    className="sp-btn sp-btn--sm"
                     onClick={() => {
                       setTransferId((cur) => (cur === s.id ? null : s.id));
                       setTargetOwner("");
@@ -243,6 +251,13 @@ export function AdminServersTab() {
                         Transfer
                       </button>
                     </div>
+                  </td>
+                </tr>
+              )}
+              {portsId === s.id && (
+                <tr>
+                  <td colSpan={6} style={{ background: "var(--sp-bg-alt)" }}>
+                    <ServerPortsPanel serverId={s.id} />
                   </td>
                 </tr>
               )}

@@ -360,3 +360,82 @@ func TestDeleteServerReleasesAllocation(t *testing.T) {
 		t.Errorf("expected the allocation to be unclaimed after delete, got %+v", allocs)
 	}
 }
+
+func TestBuildSpecPublishesAllAllocatedPorts(t *testing.T) {
+	svc, nodes, eggs, servers, users := newTestService(t, &fakeSender{})
+	owner := seedUser(t, users)
+	node := seedNode(t, nodes)
+	egg := seedEgg(t, eggs)
+
+	now := time.Now().UTC()
+	server := &models.Server{
+		ID: uuid.NewString(), OwnerID: owner.ID, NodeID: node.ID, EggID: egg.ID,
+		Name: "s1", Status: models.StatusRunning, MemoryBytes: 1024 * 1024 * 1024,
+		PrimaryPort: 25565, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := servers.Create(server); err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+
+	// Seed two ports on the node and attach both to the server (primary + one
+	// admin-added extra).
+	if _, err := svc.Allocations.CreateRange(node.ID, 25565, 25565); err != nil {
+		t.Fatalf("seed primary alloc: %v", err)
+	}
+	if _, err := svc.Allocations.CreateRange(node.ID, 25570, 25570); err != nil {
+		t.Fatalf("seed extra alloc: %v", err)
+	}
+	for _, a := range mustListByNode(t, svc, node.ID) {
+		if _, err := svc.Allocations.ClaimSpecific(a.ID, server.ID); err != nil {
+			t.Fatalf("claim %d: %v", a.Port, err)
+		}
+	}
+
+	spec := svc.buildSpec(server, egg)
+
+	// 2 ports × (tcp + udp) = 4 bindings, and never nil (nil marshals to JSON
+	// null, which the daemon can't decode).
+	if spec.PortBindings == nil {
+		t.Fatal("PortBindings must not be nil")
+	}
+	want := map[string]bool{"25565/tcp": false, "25565/udp": false, "25570/tcp": false, "25570/udp": false}
+	if len(spec.PortBindings) != len(want) {
+		t.Fatalf("expected %d port bindings, got %d: %+v", len(want), len(spec.PortBindings), spec.PortBindings)
+	}
+	for _, pb := range spec.PortBindings {
+		if _, ok := want[pb.ContainerPort]; !ok {
+			t.Errorf("unexpected binding %q", pb.ContainerPort)
+		}
+		want[pb.ContainerPort] = true
+	}
+	for k, seen := range want {
+		if !seen {
+			t.Errorf("missing binding %q", k)
+		}
+	}
+
+	env := map[string]string{}
+	for _, kv := range spec.Env {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			env[kv[:i]] = kv[i+1:]
+		}
+	}
+	if env["SERVER_PORT"] != "25565" {
+		t.Errorf("SERVER_PORT = %q, want 25565", env["SERVER_PORT"])
+	}
+	if env["SERVER_ADDITIONAL_PORTS"] != "25570" {
+		t.Errorf("SERVER_ADDITIONAL_PORTS = %q, want 25570", env["SERVER_ADDITIONAL_PORTS"])
+	}
+	if env["SERVER_PORT_1"] != "25570" {
+		t.Errorf("SERVER_PORT_1 = %q, want 25570", env["SERVER_PORT_1"])
+	}
+}
+
+func mustListByNode(t *testing.T, svc *Service, nodeID string) []*models.Allocation {
+	t.Helper()
+	a, err := svc.Allocations.ListByNode(nodeID)
+	if err != nil {
+		t.Fatalf("ListByNode: %v", err)
+	}
+	return a
+}

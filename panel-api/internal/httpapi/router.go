@@ -144,6 +144,9 @@ func NewRouter(d Deps) http.Handler {
 					r.Post("/{serverID}/suspend", d.AdminSuspendServer)
 					r.Post("/{serverID}/unsuspend", d.AdminUnsuspendServer)
 					r.Post("/{serverID}/owner", d.AdminTransferServer)
+					r.Get("/{serverID}/allocations", d.AdminListServerAllocations)
+					r.Post("/{serverID}/allocations", d.AdminAddServerAllocation)
+					r.Delete("/{serverID}/allocations/{allocationID}", d.AdminRemoveServerAllocation)
 					r.Delete("/{serverID}", d.AdminDeleteServer)
 				})
 
