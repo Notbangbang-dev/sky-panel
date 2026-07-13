@@ -9,6 +9,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { FilesTab } from "../components/server/FilesTab";
 import { SharingTab } from "../components/server/SharingTab";
 import { SettingsTab } from "../components/server/SettingsTab";
+import { StartupTab } from "../components/server/StartupTab";
 import { ActivityTab } from "../components/server/ActivityTab";
 import { BackupsTab } from "../components/server/BackupsTab";
 import { SchedulesTab } from "../components/server/SchedulesTab";
@@ -25,8 +26,12 @@ interface ConsoleLine {
   message: string;
 }
 
-const TABS = ["Console", "Players", "Files", "Mods", "Backups", "Databases", "Schedules", "Activity", "Settings", "Sharing"] as const;
+const TABS = ["Console", "Players", "Files", "Mods", "Backups", "Databases", "Schedules", "Activity", "Startup", "Settings", "Sharing"] as const;
 type Tab = (typeof TABS)[number];
+
+// Cap the in-memory console scrollback so a long-running/chatty server can't
+// grow the buffer unbounded and slow the tab.
+const MAX_CONSOLE_LINES = 1000;
 
 export function ServerDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -49,7 +54,7 @@ export function ServerDetailPage() {
 
   const isAdmin = user?.role === "admin";
   const canManage = !!server && !!user && (server.owner_id === user.id || isAdmin);
-  const manageOnly: Tab[] = ["Schedules", "Settings", "Sharing"];
+  const manageOnly: Tab[] = ["Schedules", "Startup", "Settings", "Sharing"];
   const visibleTabs = TABS.filter((t) => !manageOnly.includes(t) || canManage);
   const [tab, setTab] = useState<Tab>("Console");
 
@@ -72,7 +77,12 @@ export function ServerDetailPage() {
   }, []);
 
   useTopic<ConsoleLine>(id ? `server:${id}:console` : null, (msg) => {
-    setLines((prev) => [...prev, msg.message]);
+    setLines((prev) => {
+      // Bound the scrollback so a chatty or long-running server can't grow the
+      // buffer without limit and slow the tab (or leak memory) over time.
+      const next = [...prev, msg.message];
+      return next.length > MAX_CONSOLE_LINES ? next.slice(next.length - MAX_CONSOLE_LINES) : next;
+    });
   });
   useTopic<ContainerHeartbeat>(id ? `server:${id}:stats` : null, (msg) => {
     lastWsAt.current = Date.now();
@@ -346,6 +356,7 @@ export function ServerDetailPage() {
       {tab === "Databases" && <DatabasesTab serverId={id!} />}
       {tab === "Schedules" && canManage && <SchedulesTab serverId={id!} />}
       {tab === "Activity" && <ActivityTab serverId={id!} />}
+      {tab === "Startup" && canManage && <StartupTab server={server} />}
       {tab === "Settings" && canManage && <SettingsTab server={server} />}
       {tab === "Sharing" && canManage && <SharingTab serverId={id!} />}
     </div>

@@ -1,5 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ApiError } from "./lib/api";
+import { toast, ToastHost } from "./lib/toast";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ThemeProvider } from "./lib/ThemeProvider";
 import { AppearanceProvider } from "./lib/AppearanceProvider";
 import { Background } from "./components/Background";
@@ -24,7 +27,28 @@ import { AccountPage } from "./pages/AccountPage";
 import { ThemeBuilderPage } from "./pages/ThemeBuilderPage";
 import { AdminPage } from "./pages/AdminPage";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  // Surface background query failures as a toast instead of failing silently.
+  // A 401 is handled by the API layer's token refresh, so don't nag about it.
+  queryCache: new QueryCache({
+    onError: (error) => {
+      if (error instanceof ApiError && error.status === 401) return;
+      toast.error(error instanceof Error ? error.message : "Something went wrong");
+    },
+  }),
+  defaultOptions: {
+    queries: {
+      // Don't retry client errors (4xx) — they won't succeed on retry and just
+      // delay the error. Retry a couple times for transient 5xx/network faults.
+      retry: (failureCount, error) => {
+        if (error instanceof ApiError && error.status >= 400 && error.status < 500) return false;
+        return failureCount < 2;
+      },
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -44,12 +68,14 @@ function ServerDetailRoute() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AppearanceProvider>
-        <ThemeProvider>
-          <Background />
-          <div className="sp-scanlines" />
-          <div className="sp-grain" />
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AppearanceProvider>
+          <ThemeProvider>
+            <Background />
+            <div className="sp-scanlines" />
+            <div className="sp-grain" />
+            <ToastHost />
           <BrowserRouter>
             <BroadcastBanner />
             <MaintenanceGate>
@@ -88,6 +114,7 @@ function App() {
         </ThemeProvider>
       </AppearanceProvider>
     </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

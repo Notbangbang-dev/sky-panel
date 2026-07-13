@@ -1584,3 +1584,36 @@ a.sp-card:hover {
     opacity: 0.4;
   }
 }
+
+/* Toast notifications (bottom-right stack). */
+.sp-toast-host {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.sp-toast {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  cursor: pointer;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+}
+.sp-toast__kind {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.sp-toast__msg {
+  font-size: 13px;
+  color: var(--sp-text);
+  line-height: 1.35;
+  word-break: break-word;
+}

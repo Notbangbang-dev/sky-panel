@@ -52,15 +52,22 @@ export function ServersListPage() {
     onError: (err) => setError(err instanceof ApiError ? err.message : "Failed to clone server"),
   });
 
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
   const sortedServers = useMemo(() => {
     if (!servers) return servers;
-    return [...servers].sort((a, b) => {
-      const fa = favoriteSet.has(a.id) ? 0 : 1;
-      const fb = favoriteSet.has(b.id) ? 0 : 1;
-      if (fa !== fb) return fa - fb;
-      return a.name.localeCompare(b.name);
-    });
-  }, [servers, favoriteSet]);
+    const q = search.trim().toLowerCase();
+    return [...servers]
+      .filter((s) => (q === "" ? true : s.name.toLowerCase().includes(q)))
+      .filter((s) => (statusFilter === "all" ? true : s.status === statusFilter))
+      .sort((a, b) => {
+        const fa = favoriteSet.has(a.id) ? 0 : 1;
+        const fb = favoriteSet.has(b.id) ? 0 : 1;
+        if (fa !== fb) return fa - fb;
+        return a.name.localeCompare(b.name);
+      });
+  }, [servers, favoriteSet, search, statusFilter]);
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
@@ -235,6 +242,32 @@ export function ServersListPage() {
         </form>
       )}
 
+      {(servers?.length ?? 0) > 0 && (
+        <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+          <input
+            className="sp-input"
+            style={{ flex: "1 1 220px", maxWidth: 360 }}
+            placeholder="Search servers…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search servers by name"
+          />
+          <select
+            className="sp-select"
+            style={{ width: 160 }}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            aria-label="Filter by status"
+          >
+            <option value="all">All statuses</option>
+            <option value="running">Running</option>
+            <option value="offline">Offline</option>
+            <option value="installing">Installing</option>
+            <option value="errored">Errored</option>
+          </select>
+        </div>
+      )}
+
       <table className="sp-table">
         <thead>
           <tr>
@@ -247,6 +280,13 @@ export function ServersListPage() {
           </tr>
         </thead>
         <tbody>
+          {sortedServers?.length === 0 && (
+            <tr>
+              <td colSpan={6} className="sp-mono" style={{ color: "var(--sp-text-muted)", textAlign: "center", padding: "24px 0" }}>
+                {servers && servers.length > 0 ? "No servers match your filters." : "No servers yet — create one to get started."}
+              </td>
+            </tr>
+          )}
           {sortedServers?.map((server) => {
             const starred = favoriteSet.has(server.id);
             return (
