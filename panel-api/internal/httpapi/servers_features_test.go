@@ -58,6 +58,37 @@ func TestUpdateServerPreservesOmittedResources(t *testing.T) {
 	}
 }
 
+func TestUpdateServerPreservesVariablesWhenOmitted(t *testing.T) {
+	router, _, _, ownerAccess, server := setupServerWithFakeAgent(t)
+
+	// Set a custom startup variable.
+	first := authedJSON(t, router, http.MethodPatch, "/api/v1/servers/"+server.ID, ownerAccess, updateServerRequest{
+		Name: "Configured", MemoryBytes: 1024 * 1024 * 1024, Variables: map[string]string{"VERSION": "1.20.1"},
+	})
+	if first.Code != http.StatusOK {
+		t.Fatalf("first update: expected 200, got %d: %s", first.Code, first.Body.String())
+	}
+	var afterFirst serverResponse
+	decodeBody(t, first, &afterFirst)
+	if afterFirst.Variables["VERSION"] != "1.20.1" {
+		t.Fatalf("variable not stored: %+v", afterFirst.Variables)
+	}
+
+	// A later settings save that omits variables (the plain Settings form) must
+	// NOT reset the custom variable back to the egg default.
+	second := authedJSON(t, router, http.MethodPatch, "/api/v1/servers/"+server.ID, ownerAccess, updateServerRequest{
+		Name: "Renamed", MemoryBytes: 1024 * 1024 * 1024,
+	})
+	if second.Code != http.StatusOK {
+		t.Fatalf("second update: expected 200, got %d: %s", second.Code, second.Body.String())
+	}
+	var afterSecond serverResponse
+	decodeBody(t, second, &afterSecond)
+	if afterSecond.Variables["VERSION"] != "1.20.1" {
+		t.Errorf("custom variable was reset on settings save: got %+v", afterSecond.Variables)
+	}
+}
+
 func TestReinstallServer(t *testing.T) {
 	router, _, _, ownerAccess, server := setupServerWithFakeAgent(t)
 

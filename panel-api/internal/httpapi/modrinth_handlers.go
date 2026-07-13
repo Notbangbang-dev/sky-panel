@@ -180,7 +180,7 @@ type modrinthInstallRequest struct {
 // ModrinthInstall downloads a chosen Modrinth version file server-side and
 // writes it into the server's mods/ or plugins/ directory.
 func (d Deps) ModrinthInstall(w http.ResponseWriter, r *http.Request) {
-	server := d.loadServerWithPermission(w, r, models.PermFiles)
+	server := d.loadServerForWrite(w, r, models.PermFiles)
 	if server == nil {
 		return
 	}

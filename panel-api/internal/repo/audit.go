@@ -25,6 +25,17 @@ func (r *Audit) Record(actorID, action, target, metadata string) error {
 	return err
 }
 
+// PruneOlderThan deletes audit entries older than cutoff, returning the number
+// removed. Keeps the audit log (and its created_at index) bounded on the
+// single-writer DB while retaining a generous recent window.
+func (r *Audit) PruneOlderThan(cutoff time.Time) (int64, error) {
+	res, err := r.db.Exec(`DELETE FROM audit_log WHERE created_at < ?`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (r *Audit) List(limit int) ([]*models.AuditEntry, error) {
 	rows, err := r.db.Query(
 		`SELECT id, actor_id, action, target, metadata, created_at FROM audit_log ORDER BY created_at DESC LIMIT ?`, limit,

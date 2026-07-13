@@ -151,7 +151,8 @@ func (s *Service) Provision(serverID string, createTimeout time.Duration) error 
 	if err != nil {
 		return fmt.Errorf("load egg: %w", err)
 	}
-	if err := s.provision(server, egg, createTimeout); err != nil {
+	// Initial provision always starts the server.
+	if err := s.provision(server, egg, createTimeout, true); err != nil {
 		_ = s.Servers.SetError(serverID, err.Error())
 		return err
 	}
@@ -176,16 +177,19 @@ func (s *Service) UpdateServer(serverID, name string, memoryBytes int64, cpuLimi
 		return nil, fmt.Errorf("load egg: %w", err)
 	}
 
+	// Preserve the server's power state: only restart it if it was running.
+	autoStart := server.Status == models.StatusRunning
+
 	// Recreate the container with the new spec. provision's create step removes
 	// any existing container with the same name and recreates it, so there's no
 	// separate remove dispatch (which could race the create and delete the new
 	// container).
-	if err := s.provision(server, egg, defaultProvisionTimeout); err != nil {
+	if err := s.provision(server, egg, defaultProvisionTimeout, autoStart); err != nil {
 		_ = s.Servers.SetError(serverID, err.Error())
 		return server, err
 	}
-	_ = s.Servers.SetStatus(serverID, models.StatusRunning)
-	server.Status = models.StatusRunning
+	_ = s.Servers.SetStatus(serverID, endState(autoStart))
+	server.Status = endState(autoStart)
 	return server, nil
 }
 
@@ -252,11 +256,12 @@ func (s *Service) reprovision(server *models.Server) error {
 	if err != nil {
 		return fmt.Errorf("load egg: %w", err)
 	}
-	if err := s.provision(server, egg, defaultProvisionTimeout); err != nil {
+	autoStart := server.Status == models.StatusRunning
+	if err := s.provision(server, egg, defaultProvisionTimeout, autoStart); err != nil {
 		_ = s.Servers.SetError(server.ID, err.Error())
 		return err
 	}
-	return s.Servers.SetStatus(server.ID, models.StatusRunning)
+	return s.Servers.SetStatus(server.ID, endState(autoStart))
 }
 
 // ReinstallServer recreates the container from its egg, re-running the
@@ -271,6 +276,8 @@ func (s *Service) ReinstallServer(serverID, eggID string) error {
 	if err != nil {
 		return fmt.Errorf("load server: %w", err)
 	}
+	// Capture power state before we flip the row to "installing".
+	autoStart := server.Status == models.StatusRunning
 
 	if eggID != "" && eggID != server.EggID {
 		if _, err := s.Eggs.GetByID(eggID); err != nil {
@@ -293,11 +300,11 @@ func (s *Service) ReinstallServer(serverID, eggID string) error {
 	// name-clashing container and recreates it. Removing here in parallel could
 	// race the create and delete the freshly made container.
 	_ = s.Servers.SetStatus(serverID, models.StatusInstalling)
-	if err := s.provision(server, egg, ProvisionCreateTimeout); err != nil {
+	if err := s.provision(server, egg, ProvisionCreateTimeout, autoStart); err != nil {
 		_ = s.Servers.SetError(serverID, err.Error())
 		return err
 	}
-	return s.Servers.SetStatus(serverID, models.StatusRunning)
+	return s.Servers.SetStatus(serverID, endState(autoStart))
 }
 
 // SuspendServer flags a server as suspended and stops its container. The stop
@@ -332,7 +339,7 @@ func (s *Service) UnsuspendServer(serverID string) error {
 // UI can show progress instead of a static spinner. When the node's image
 // cache is warm (see WarmImagesOnNode), the pull is a near-instant no-op and
 // the whole sequence finishes in seconds.
-func (s *Service) provision(server *models.Server, egg *models.Egg, pullTimeout time.Duration) error {
+func (s *Service) provision(server *models.Server, egg *models.Egg, pullTimeout time.Duration, autoStart bool) error {
 	spec := s.buildSpec(server, egg)
 
 	if s.Hub.SupportsPullImage(server.NodeID) {
@@ -357,11 +364,26 @@ func (s *Service) provision(server *models.Server, egg *models.Egg, pullTimeout 
 		}
 	}
 
+	// Only (re)start when asked to. Re-provisioning a server that was stopped
+	// (settings edit, port change, reinstall) must leave it stopped rather than
+	// surprising the owner by booting it.
+	if !autoStart {
+		return nil
+	}
 	s.setPhase(server.ID, "Starting…")
 	if _, err := s.dispatch(server.NodeID, agenthub.ActionStart, server.ID, nil); err != nil {
 		return fmt.Errorf("dispatch start: %w", err)
 	}
 	return nil
+}
+
+// endState returns the status a re-provisioned server should land in: running
+// if it was running before (and we restarted it), otherwise offline.
+func endState(autoStart bool) models.ServerStatus {
+	if autoStart {
+		return models.StatusRunning
+	}
+	return models.StatusOffline
 }
 
 // setPhase records a live provisioning phase as the server's status message
@@ -513,12 +535,12 @@ func (s *Service) buildSpec(server *models.Server, egg *models.Egg) *agenthub.Co
 	}
 
 	return &agenthub.ContainerSpec{
-		Name:        "sky-" + server.ID,
-		Image:       egg.DockerImage,
-		Cmd:         cmd,
-		Env:         env,
-		WorkingDir:  "/home/container",
-		Binds:       []string{fmt.Sprintf("/srv/sky-panel/volumes/%s:/home/container", server.ID)},
+		Name:         "sky-" + server.ID,
+		Image:        egg.DockerImage,
+		Cmd:          cmd,
+		Env:          env,
+		WorkingDir:   "/home/container",
+		Binds:        []string{fmt.Sprintf("/srv/sky-panel/volumes/%s:/home/container", server.ID)},
 		MemoryBytes:  server.MemoryBytes,
 		NanoCPUs:     nanoCPUs,
 		PortBindings: portBindings,
@@ -671,8 +693,13 @@ func (s *Service) SendConsole(serverID, input string) error {
 	return nil
 }
 
-// RunScheduleAction executes one automation action against a server.
+// RunScheduleAction executes one automation action against a server. A
+// suspended server runs no automations — suspension freezes power, backups, and
+// console commands alike, so the action is skipped (not an error).
 func (s *Service) RunScheduleAction(serverID, action, payload string) error {
+	if server, err := s.Servers.GetByID(serverID); err == nil && server.Suspended {
+		return nil
+	}
 	switch action {
 	case models.ScheduleStart:
 		return s.PowerAction(serverID, agenthub.ActionStart)

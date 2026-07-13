@@ -40,7 +40,7 @@ type createDatabaseRequest struct {
 }
 
 func (d Deps) CreateDatabase(w http.ResponseWriter, r *http.Request) {
-	server := d.loadServerWithPermission(w, r, models.PermDatabases)
+	server := d.loadServerForWrite(w, r, models.PermDatabases)
 	if server == nil {
 		return
 	}

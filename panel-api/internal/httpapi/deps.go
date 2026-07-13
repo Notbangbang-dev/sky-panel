@@ -42,4 +42,13 @@ type Deps struct {
 	Audit       *repo.Audit
 
 	RefreshTTL time.Duration
+
+	// RateLimitEnabled turns the per-IP / per-user rate limiters on. Production
+	// (main.go) sets this true; the test suite leaves it false so integration
+	// tests can fire many requests from one address without tripping limits.
+	RateLimitEnabled bool
+
+	// CORSOrigin, when set, pins Access-Control-Allow-Origin to this exact
+	// origin instead of the permissive "*" default. Sourced from SKY_CORS_ORIGIN.
+	CORSOrigin string
 }

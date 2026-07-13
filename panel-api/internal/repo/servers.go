@@ -48,6 +48,17 @@ func (r *Servers) NodeIDForServer(id string) (nodeID string, ok bool) {
 	return nodeID, true
 }
 
+// CountByNode returns how many servers are currently hosted on a node. Used to
+// refuse deleting a node that still has servers (which would otherwise CASCADE
+// their rows away and orphan the real containers/databases on the box).
+func (r *Servers) CountByNode(nodeID string) (int, error) {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM servers WHERE node_id = ?`, nodeID).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 func (r *Servers) ListByOwner(ownerID string) ([]*models.Server, error) {
 	rows, err := r.db.Query(`SELECT `+serverColumns+` FROM servers WHERE owner_id = ? ORDER BY created_at`, ownerID)
 	if err != nil {

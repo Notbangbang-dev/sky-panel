@@ -65,6 +65,9 @@ func (c *Conn) SendCommand(ctx context.Context, cmd CommandPayload) (AckPayload,
 	}
 
 	c.writeMu.Lock()
+	// Bound the write so a stuck/slow node can't block this command goroutine
+	// (and, via writeMu, every other command to the same node) indefinitely.
+	_ = c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 	err = c.conn.WriteJSON(env)
 	c.writeMu.Unlock()
 	if err != nil {
@@ -153,6 +156,15 @@ func (r *Registry) Get(nodeID string) (*Conn, bool) {
 func (r *Registry) Connected(nodeID string) bool {
 	_, ok := r.Get(nodeID)
 	return ok
+}
+
+// Close severs the live connection for a node, if any. Used when a node token
+// is rotated or the node is deleted, so the old secret stops working
+// immediately instead of remaining valid until the daemon happens to reconnect.
+func (r *Registry) Close(nodeID string) {
+	if c, ok := r.Get(nodeID); ok {
+		_ = c.Close()
+	}
 }
 
 // SupportsPullImage reports whether a connected node advertised the pull_image

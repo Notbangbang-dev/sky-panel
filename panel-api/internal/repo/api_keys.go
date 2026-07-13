@@ -24,6 +24,16 @@ func (r *APIKeys) Create(id, userID, name, keyHash string) error {
 	return err
 }
 
+// CountByUser returns how many API keys a user currently has, used to enforce
+// a per-user cap so a leaked session can't mint an unbounded number of keys.
+func (r *APIKeys) CountByUser(userID string) (int, error) {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM api_keys WHERE user_id = ?`, userID).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 func (r *APIKeys) ListByUser(userID string) ([]*models.APIKey, error) {
 	rows, err := r.db.Query(
 		`SELECT id, name, last_used_at, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`, userID,

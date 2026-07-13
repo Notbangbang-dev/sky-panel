@@ -72,6 +72,12 @@ type setUserRoleRequest struct {
 }
 
 func (d Deps) AdminSetUserRole(w http.ResponseWriter, r *http.Request) {
+	claims, ok := auth.FromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized", "missing auth context")
+		return
+	}
+
 	var req setUserRoleRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid request body")
@@ -85,6 +91,37 @@ func (d Deps) AdminSetUserRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID := pathParam(r, "userID")
+
+	// Guard against locking the instance out of the admin console. A demotion
+	// (admin -> user) may not target yourself, and may not remove the last
+	// remaining admin.
+	if role == models.RoleUser {
+		target, err := d.Users.GetByID(userID)
+		if err != nil {
+			if errors.Is(err, repo.ErrNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "user not found")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load user")
+			return
+		}
+		if target.Role == models.RoleAdmin {
+			if userID == claims.UserID {
+				writeError(w, http.StatusConflict, "last_admin", "you cannot demote yourself; ask another admin to do it")
+				return
+			}
+			admins, err := d.Users.CountAdmins()
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "internal_error", "failed to count admins")
+				return
+			}
+			if admins <= 1 {
+				writeError(w, http.StatusConflict, "last_admin", "cannot demote the last remaining admin")
+				return
+			}
+		}
+	}
+
 	if err := d.Users.SetRole(userID, role); err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "user not found")
@@ -93,6 +130,11 @@ func (d Deps) AdminSetUserRole(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to update role")
 		return
 	}
+
+	// A role change must take effect promptly: revoke the target's sessions so
+	// their next request re-authenticates with a fresh token carrying the new
+	// role, instead of retaining the old role until the access token expires.
+	_ = d.RefreshTokens.DeleteAllForUser(userID)
 
 	d.audit(r, "user.set_role", userID, req.Role)
 	w.WriteHeader(http.StatusNoContent)
@@ -109,6 +151,20 @@ func (d Deps) AdminDeleteUser(w http.ResponseWriter, r *http.Request) {
 	if userID == claims.UserID {
 		writeError(w, http.StatusBadRequest, "bad_request", "you cannot delete your own account")
 		return
+	}
+
+	// Refuse to delete the last remaining admin — otherwise the instance is
+	// left with no way into the admin console short of editing the database.
+	if target, err := d.Users.GetByID(userID); err == nil && target.Role == models.RoleAdmin {
+		admins, err := d.Users.CountAdmins()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to count admins")
+			return
+		}
+		if admins <= 1 {
+			writeError(w, http.StatusConflict, "last_admin", "cannot delete the last remaining admin")
+			return
+		}
 	}
 
 	// Drop the user's databases on their nodes first — deleting the user

@@ -14,6 +14,7 @@ import (
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/httpapi"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/quotasvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/repo"
+	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/retentionsvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/schedulesvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/serversvc"
 	"github.com/Notbangbang-dev/sky-panel/panel-api/internal/store"
@@ -23,6 +24,12 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("sky-panel: refusing to start: %v", err)
+	}
+	if cfg.DevMode {
+		log.Printf("sky-panel: SKY_DEV_MODE is on — production safety checks (secret strength) are relaxed. Do NOT use in production.")
+	}
 
 	db, err := store.Open(cfg.DBPath)
 	if err != nil {
@@ -90,12 +97,17 @@ func main() {
 		Settings:      settings,
 		Audit:         auditLog,
 		RefreshTTL:    cfg.RefreshTTL,
+
+		RateLimitEnabled: true,
+		CORSOrigin:       cfg.CORSOrigin,
 	}
 
 	// Background loop that runs due scheduled backups.
 	go backupsvc.NewScheduler(servers, serverSvc, 15*time.Minute).Run(context.Background())
 	// Background loop that runs due per-server automations (schedules).
 	go schedulesvc.NewScheduler(schedules, serverSvc, time.Minute).Run(context.Background())
+	// Background housekeeping: prune expired refresh tokens and old audit rows.
+	go retentionsvc.NewScheduler(repo.NewRefreshTokens(db), auditLog, 6*time.Hour, 90*24*time.Hour).Run(context.Background())
 
 	log.Printf("sky-panel panel-api listening on %s", cfg.HTTPAddr)
 	if err := http.ListenAndServe(cfg.HTTPAddr, httpapi.NewRouter(deps)); err != nil {

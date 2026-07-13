@@ -52,6 +52,17 @@ func (r *RefreshTokens) DeleteAllForUser(userID string) error {
 	return err
 }
 
+// DeleteExpired removes refresh tokens whose expiry has passed, returning the
+// number pruned. Run periodically so the table and its unique index don't grow
+// without bound on the single-writer DB.
+func (r *RefreshTokens) DeleteExpired(now time.Time) (int64, error) {
+	res, err := r.db.Exec(`DELETE FROM refresh_tokens WHERE expires_at < ?`, now)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // Session is one of a user's active refresh tokens, shown as a login session.
 type Session struct {
 	ID        string
