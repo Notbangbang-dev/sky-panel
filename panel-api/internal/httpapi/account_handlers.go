@@ -15,6 +15,9 @@ import (
 // a JWT access token before doing a DB lookup.
 const apiKeyPrefix = "sky_"
 
+// maxAPIKeysPerUser bounds how many personal API keys one account may hold.
+const maxAPIKeysPerUser = 25
+
 // resolveAPIKey is the auth.ClaimsResolver: it maps a raw personal API key to
 // its owner's Claims. Wired into RequireAuth so API keys authenticate the same
 // endpoints as a logged-in session.
@@ -212,6 +215,16 @@ func (d Deps) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
 		name = "API key"
+	}
+	if len(name) > 100 {
+		name = name[:100]
+	}
+
+	// Cap the number of keys per user so a leaked/hijacked session can't mint an
+	// unbounded set of long-lived credentials.
+	if n, err := d.APIKeys.CountByUser(claims.UserID); err == nil && n >= maxAPIKeysPerUser {
+		writeError(w, http.StatusConflict, "too_many_keys", "you've reached the maximum number of API keys; delete one before creating another")
+		return
 	}
 
 	raw, err := auth.NewOpaqueToken()

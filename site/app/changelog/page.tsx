@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
+import { CHANGELOG_FALLBACK } from "@/lib/changelog-fallback";
 
 export const revalidate = 300;
 
@@ -87,15 +88,24 @@ function inline(text: string, key: string) {
     });
 }
 
+// Parse the build-time bundled changelog so the page always has content to
+// render even when the network fetch is unavailable.
+function fallbackEntries(): Entry[] {
+  return parseChangelog(CHANGELOG_FALLBACK);
+}
+
 async function getChangelog(): Promise<Entry[]> {
   try {
     const res = await fetch("https://raw.githubusercontent.com/Notbangbang-dev/sky-panel/main/CHANGELOG.md", {
       next: { revalidate: 300 },
     });
-    if (!res.ok) return [];
-    return parseChangelog(await res.text());
+    if (!res.ok) return fallbackEntries();
+    const parsed = parseChangelog(await res.text());
+    // A successful-but-empty response (e.g. a redirect page) should still
+    // render the bundled entries rather than a blank timeline.
+    return parsed.length ? parsed : fallbackEntries();
   } catch {
-    return [];
+    return fallbackEntries();
   }
 }
 

@@ -47,6 +47,11 @@ func (s *Scheduler) runOnce() {
 		return
 	}
 	for _, server := range due {
+		// A suspended server must not keep consuming node disk via scheduled
+		// backups — suspension freezes all automation.
+		if server.Suspended {
+			continue
+		}
 		if _, err := s.svc.Backup(server.ID); err != nil {
 			// A node being offline is expected/transient — log and move on;
 			// the server stays "due" and will be retried next tick.

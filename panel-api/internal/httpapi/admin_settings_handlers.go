@@ -16,6 +16,7 @@ type setSettingRequest struct {
 }
 
 func (d Deps) AdminSetSetting(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 128<<10)
 	var req setSettingRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid request body")
@@ -23,6 +24,10 @@ func (d Deps) AdminSetSetting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := pathParam(r, "key")
+	if ok, msg := validateSetting(key, req.Value); !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", msg)
+		return
+	}
 	if err := d.Settings.Set(key, req.Value); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to save setting")
 		return

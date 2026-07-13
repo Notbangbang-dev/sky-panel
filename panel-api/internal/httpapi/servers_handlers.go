@@ -25,16 +25,16 @@ type createServerRequest struct {
 }
 
 type serverResponse struct {
-	ID                  string            `json:"id"`
-	OwnerID             string            `json:"owner_id"`
-	NodeID              string            `json:"node_id"`
-	EggID               string            `json:"egg_id"`
-	Name                string            `json:"name"`
-	Status              string            `json:"status"`
-	MemoryBytes         int64             `json:"memory_bytes"`
-	CPULimit            int               `json:"cpu_limit"`
-	DiskBytes           int64             `json:"disk_bytes"`
-	PrimaryPort         int               `json:"primary_port"`
+	ID          string `json:"id"`
+	OwnerID     string `json:"owner_id"`
+	NodeID      string `json:"node_id"`
+	EggID       string `json:"egg_id"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	MemoryBytes int64  `json:"memory_bytes"`
+	CPULimit    int    `json:"cpu_limit"`
+	DiskBytes   int64  `json:"disk_bytes"`
+	PrimaryPort int    `json:"primary_port"`
 	// AdditionalPorts lists the extra (admin-assigned) ports a server holds,
 	// beyond its primary. Populated only on the single-server GET (omitted from
 	// list responses to avoid a per-row allocation query).
@@ -69,9 +69,28 @@ func (d Deps) CreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 256<<10)
 	var req createServerRequest
 	if err := decodeJSON(r, &req); err != nil || req.NodeID == "" || req.EggID == "" || req.Name == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "node_id, egg_id and name are required")
+		return
+	}
+	if req.Name = trimName(req.Name); req.Name == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "name is required")
+		return
+	}
+	// Reject garbage resource specs before they reach the quota check or the
+	// daemon: memory must be a positive amount, and cpu/disk can't be negative.
+	if req.MemoryBytes <= 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "memory_bytes must be greater than zero")
+		return
+	}
+	if req.CPULimit < 0 || req.DiskBytes < 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "cpu_limit and disk_bytes cannot be negative")
+		return
+	}
+	if !validVariables(req.Variables) {
+		writeError(w, http.StatusBadRequest, "bad_request", "too many variables or a variable value is too large")
 		return
 	}
 
@@ -368,10 +387,30 @@ func (d Deps) UpdateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 256<<10)
 	var req updateServerRequest
 	if err := decodeJSON(r, &req); err != nil || req.Name == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "name is required")
 		return
+	}
+	if req.Name = trimName(req.Name); req.Name == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "name is required")
+		return
+	}
+	if req.CPULimit < 0 || req.DiskBytes < 0 || req.MemoryBytes < 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "resource limits cannot be negative")
+		return
+	}
+	if !validVariables(req.Variables) {
+		writeError(w, http.StatusBadRequest, "bad_request", "too many variables or a variable value is too large")
+		return
+	}
+	// A nil variables map means the client didn't touch startup variables (e.g.
+	// the plain Settings form, which only edits limits) — keep the server's
+	// current values instead of resetting every custom startup variable to its
+	// egg default. The Startup editor always sends the full variables map.
+	if req.Variables == nil {
+		req.Variables = server.Variables
 	}
 	// An omitted numeric field decodes to 0; treat that as "keep current"
 	// rather than wiping the server's allocation (which would also corrupt

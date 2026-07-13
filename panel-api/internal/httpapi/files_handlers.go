@@ -83,7 +83,7 @@ type writeFileRequest struct {
 }
 
 func (d Deps) WriteFile(w http.ResponseWriter, r *http.Request) {
-	server := d.loadServerWithPermission(w, r, models.PermFiles)
+	server := d.loadServerForWrite(w, r, models.PermFiles)
 	if server == nil {
 		return
 	}
@@ -96,6 +96,10 @@ func (d Deps) WriteFile(w http.ResponseWriter, r *http.Request) {
 	var req writeFileRequest
 	if err := decodeJSON(r, &req); err != nil || req.Path == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "path and content_base64 are required")
+		return
+	}
+	if !validRelPath(req.Path) {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid path")
 		return
 	}
 
@@ -115,7 +119,7 @@ type renameFileRequest struct {
 }
 
 func (d Deps) RenameFile(w http.ResponseWriter, r *http.Request) {
-	server := d.loadServerWithPermission(w, r, models.PermFiles)
+	server := d.loadServerForWrite(w, r, models.PermFiles)
 	if server == nil {
 		return
 	}
@@ -123,6 +127,10 @@ func (d Deps) RenameFile(w http.ResponseWriter, r *http.Request) {
 	var req renameFileRequest
 	if err := decodeJSON(r, &req); err != nil || req.Path == "" || req.NewPath == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "path and new_path are required")
+		return
+	}
+	if !validRelPath(req.Path) || !validRelPath(req.NewPath) {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid path")
 		return
 	}
 
@@ -137,7 +145,7 @@ func (d Deps) RenameFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Deps) DeleteFile(w http.ResponseWriter, r *http.Request) {
-	server := d.loadServerWithPermission(w, r, models.PermFiles)
+	server := d.loadServerForWrite(w, r, models.PermFiles)
 	if server == nil {
 		return
 	}
@@ -145,6 +153,10 @@ func (d Deps) DeleteFile(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	if path == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "path is required")
+		return
+	}
+	if !validRelPath(path) {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid path")
 		return
 	}
 
@@ -161,7 +173,7 @@ type mkdirRequest struct {
 }
 
 func (d Deps) Mkdir(w http.ResponseWriter, r *http.Request) {
-	server := d.loadServerWithPermission(w, r, models.PermFiles)
+	server := d.loadServerForWrite(w, r, models.PermFiles)
 	if server == nil {
 		return
 	}
@@ -169,6 +181,10 @@ func (d Deps) Mkdir(w http.ResponseWriter, r *http.Request) {
 	var req mkdirRequest
 	if err := decodeJSON(r, &req); err != nil || req.Path == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "path is required")
+		return
+	}
+	if !validRelPath(req.Path) {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid path")
 		return
 	}
 

@@ -32,6 +32,21 @@ const (
 	rateLimitBurst     = 40
 )
 
+// Connection liveness bounds. A node must complete its hello within helloWait
+// of connecting (drops silent pre-auth connections that would otherwise leak a
+// goroutine + FD forever). After registration the panel pings every pingPeriod
+// and expects any traffic — a pong or a heartbeat — to arrive inside pongWait,
+// or the half-open socket is reclaimed. writeWait bounds a single frame write so
+// a stuck peer can't block a command goroutine indefinitely. maxMessageSize
+// caps a single inbound frame.
+const (
+	helloWait      = 10 * time.Second
+	pongWait       = 60 * time.Second
+	pingPeriod     = (pongWait * 9) / 10
+	writeWait      = 10 * time.Second
+	maxMessageSize = 1 << 20
+)
+
 // NodeLookup resolves a node's identity and secret from its hello token.
 // It's an interface (rather than *repo.Nodes directly) so the handler can
 // be unit tested without a database.
@@ -111,6 +126,12 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
+	// Bound the pre-auth handshake: cap the frame size and require a hello
+	// within helloWait, so an idle or malicious connection that never
+	// authenticates is dropped instead of parking a goroutine + FD forever.
+	ws.SetReadLimit(maxMessageSize)
+	_ = ws.SetReadDeadline(time.Now().Add(helloWait))
+
 	nodeID, secret, caps, err := h.awaitHello(ws)
 	if err != nil {
 		log.Printf("agenthub: rejecting connection: %v", err)
@@ -121,6 +142,17 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	h.Registry.register(nodeID, conn)
 	defer h.Registry.unregister(nodeID, conn)
 
+	// Keepalive: extend the read deadline on every pong (and, in readLoop, on
+	// every message), and ping periodically so a half-open TCP connection is
+	// detected and reclaimed rather than lingering.
+	_ = ws.SetReadDeadline(time.Now().Add(pongWait))
+	ws.SetPongHandler(func(string) error {
+		return ws.SetReadDeadline(time.Now().Add(pongWait))
+	})
+	done := make(chan struct{})
+	defer close(done)
+	go pinger(ws, done)
+
 	log.Printf("agenthub: node %s connected", nodeID)
 	if h.OnNodeConnected != nil {
 		go h.OnNodeConnected(nodeID)
@@ -129,6 +161,24 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	// The socket is dead; unblock anything still awaiting an ack on it.
 	conn.failPending()
 	log.Printf("agenthub: node %s disconnected", nodeID)
+}
+
+// pinger sends a WebSocket ping every pingPeriod until done is closed or a
+// write fails. WriteControl is safe to call concurrently with the command
+// writer, so no lock is needed here.
+func pinger(ws *websocket.Conn, done <-chan struct{}) {
+	t := time.NewTicker(pingPeriod)
+	defer t.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-t.C:
+			if err := ws.WriteControl(websocket.PingMessage, nil, time.Now().Add(writeWait)); err != nil {
+				return
+			}
+		}
+	}
 }
 
 func (h *Handler) awaitHello(ws *websocket.Conn) (nodeID string, secret []byte, capabilities []string, err error) {
@@ -165,6 +215,8 @@ func (h *Handler) readLoop(conn *Conn, ws *websocket.Conn, secret []byte) {
 		if err := ws.ReadJSON(&env); err != nil {
 			return
 		}
+		// Any inbound traffic proves the peer is alive; extend the deadline.
+		_ = ws.SetReadDeadline(time.Now().Add(pongWait))
 
 		if !limiter.Allow() {
 			log.Printf("agenthub: node %s exceeded its message rate limit, closing connection", conn.NodeID)

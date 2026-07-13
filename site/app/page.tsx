@@ -1,6 +1,7 @@
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
+import { APP_VERSION } from "@/lib/version";
 
 const SPECS = [
   { k: "Backend", v: "Go + Rust" },
@@ -46,7 +47,7 @@ export default function Home() {
         {/* ---------- Hero ---------- */}
         <section className="max-w-4xl mx-auto text-center pt-24 pb-28 md:pt-36 md:pb-36">
           <p className="reveal font-mono text-[11px] tracking-[0.32em] text-signal mb-7 uppercase">
-            Self-hosted · Open source · v0.3
+            Self-hosted · Open source · v{APP_VERSION}
           </p>
           <h1 className="reveal font-display text-5xl md:text-[5.5rem] leading-[1.02] mb-2" style={{ animationDelay: "0.06s" }}>
             A game server panel

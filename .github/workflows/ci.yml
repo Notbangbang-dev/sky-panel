@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   panel-api:
     runs-on: ubuntu-latest
@@ -13,6 +17,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: panel-api/go.mod
+          cache: true
+          cache-dependency-path: panel-api/go.sum
       - run: go build ./...
         working-directory: panel-api
       - run: go vet ./...

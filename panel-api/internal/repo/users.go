@@ -32,6 +32,17 @@ func (r *Users) Count() (int, error) {
 	return n, nil
 }
 
+// CountAdmins returns how many users currently hold the admin role. Used to
+// refuse demoting or deleting the last remaining admin, which would otherwise
+// lock the whole instance out of the admin console.
+func (r *Users) CountAdmins() (int, error) {
+	var n int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = ?`, string(models.RoleAdmin)).Scan(&n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
 func (r *Users) Create(u *models.User) error {
 	_, err := r.db.Exec(
 		`INSERT INTO users (id, email, username, password_hash, role, coins, created_at, updated_at)

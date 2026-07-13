@@ -25,11 +25,29 @@ export const DEFAULT_BACKGROUND: BackgroundConfig = {
   dim: 0.4,
 };
 
+// safeMediaUrl only permits http(s) (or same-origin relative) URLs for the
+// admin-set background image/video, so a value like `javascript:...` or a
+// `data:` SVG can't be injected into a src attribute served to every visitor
+// (including the pre-auth login page). Anything else collapses to "".
+export function safeMediaUrl(url: string): string {
+  if (!url) return "";
+  try {
+    const u = new URL(url, window.location.origin);
+    return u.protocol === "http:" || u.protocol === "https:" ? url : "";
+  } catch {
+    return "";
+  }
+}
+
 export function parseBackground(json: string): BackgroundConfig {
   if (!json) return DEFAULT_BACKGROUND;
   try {
     const parsed = JSON.parse(json) as Partial<BackgroundConfig>;
-    return { ...DEFAULT_BACKGROUND, ...parsed };
+    const merged = { ...DEFAULT_BACKGROUND, ...parsed };
+    // Sanitise externally-controlled media URLs before they ever reach a src.
+    merged.imageUrl = safeMediaUrl(merged.imageUrl);
+    merged.videoUrl = safeMediaUrl(merged.videoUrl);
+    return merged;
   } catch {
     return DEFAULT_BACKGROUND;
   }

@@ -1,0 +1,50 @@
+version: 2
+
+updates:
+  # Go control plane
+  - package-ecosystem: gomod
+    directory: /panel-api
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      go-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # React / TypeScript frontend
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      web-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Next.js marketing / docs site
+  - package-ecosystem: npm
+    directory: /site
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      site-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions used by CI and other workflows
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-patch:
+        update-types:
+          - minor
+          - patch

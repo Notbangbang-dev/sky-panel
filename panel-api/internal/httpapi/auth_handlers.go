@@ -3,6 +3,7 @@ package httpapi
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,13 +56,23 @@ func toUserResponse(u *models.User) userResponse {
 }
 
 func (d Deps) Register(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	var req registerRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid request body")
 		return
 	}
+	// Normalize identifiers: emails are lower-cased + trimmed so case variants
+	// can't create duplicate accounts (and so login isn't case-sensitive);
+	// usernames keep their display case but are trimmed and length-bounded.
+	req.Email = normalizeEmail(req.Email)
+	req.Username = strings.TrimSpace(req.Username)
 	if req.Email == "" || req.Username == "" || len(req.Password) < 8 {
 		writeError(w, http.StatusBadRequest, "invalid_input", "email, username and a password of at least 8 characters are required")
+		return
+	}
+	if len(req.Email) > 254 || len(req.Username) > 32 || len(req.Password) > 1024 {
+		writeError(w, http.StatusBadRequest, "invalid_input", "email, username, or password is too long")
 		return
 	}
 
@@ -132,11 +143,13 @@ func (d Deps) RegistrationStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Deps) Login(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	var req loginRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid request body")
 		return
 	}
+	req.Email = normalizeEmail(req.Email)
 
 	user, err := d.Users.GetByEmail(req.Email)
 	if errors.Is(err, repo.ErrNotFound) {
@@ -185,14 +198,17 @@ func (d Deps) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Rotate first: the presented refresh token is single-use. Deleting it
+	// before any further step that can fail (e.g. loading the user) guarantees
+	// the "single-use" invariant holds even on an error path — otherwise a
+	// transient failure would leave the token valid and infinitely replayable.
+	_ = d.RefreshTokens.DeleteByHash(oldHash)
+
 	user, err := d.Users.GetByID(userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to load user")
 		return
 	}
-
-	// Rotate: the old refresh token is single-use.
-	_ = d.RefreshTokens.DeleteByHash(oldHash)
 
 	d.issueTokenPair(w, user)
 }

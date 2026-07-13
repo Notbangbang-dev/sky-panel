@@ -63,16 +63,20 @@ func (r *Quotas) Add(userID string, memoryBytes int64, cpuPercent int, diskBytes
 }
 
 // Set replaces a user's bonus quota with absolute values (used by the admin
-// console to grant or reset a user's extra quota).
-func (r *Quotas) Set(userID string, memoryBytes int64, cpuPercent int, diskBytes int64) error {
+// console to grant or reset a user's extra quota). All four dimensions —
+// including databases — are written, so the admin editor is the source of
+// truth for the whole bonus rather than silently preserving the old database
+// count.
+func (r *Quotas) Set(userID string, memoryBytes int64, cpuPercent int, diskBytes int64, databases int) error {
 	_, err := r.db.Exec(
-		`INSERT INTO user_quotas (user_id, bonus_memory_bytes, bonus_cpu_percent, bonus_disk_bytes)
-		 VALUES (?, ?, ?, ?)
+		`INSERT INTO user_quotas (user_id, bonus_memory_bytes, bonus_cpu_percent, bonus_disk_bytes, bonus_databases)
+		 VALUES (?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
 		   bonus_memory_bytes = excluded.bonus_memory_bytes,
 		   bonus_cpu_percent  = excluded.bonus_cpu_percent,
-		   bonus_disk_bytes   = excluded.bonus_disk_bytes`,
-		userID, memoryBytes, cpuPercent, diskBytes,
+		   bonus_disk_bytes   = excluded.bonus_disk_bytes,
+		   bonus_databases    = excluded.bonus_databases`,
+		userID, memoryBytes, cpuPercent, diskBytes, databases,
 	)
 	return err
 }

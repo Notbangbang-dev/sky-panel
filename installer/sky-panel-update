@@ -9,6 +9,20 @@ set -euo pipefail
 REPO="Notbangbang-dev/sky-panel"
 DAEMON_REPO="Notbangbang-dev/sky-daemon"
 INSTALL_DIR="/opt/sky-panel"
+SERVICE_USER="sky-panel"
+
+ROLLBACK=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --rollback) ROLLBACK=1; shift ;;
+    -h|--help)
+      echo "usage: sky-panel-update [--rollback]"
+      echo "  (no args)    update panel-api/web and/or sky-daemon to the latest release"
+      echo "  --rollback   restore the previous (.bak) binary/web and restart the service(s)"
+      exit 0 ;;
+    *) echo "unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
 
 log() { echo "==> $*"; }
 fail() { echo "error: $*" >&2; exit 1; }
@@ -44,6 +58,45 @@ start_if_enabled() {
   systemctl is-enabled --quiet "$1" 2>/dev/null && systemctl start "$1" || true
 }
 
+# Restore the previous version kept as .bak by the last successful update, and
+# restart whatever is installed. Each update keeps panel-api.bak / web.bak /
+# sky-daemon.bak; --rollback swaps those back in (and re-applies ownership).
+do_rollback() {
+  local restored=0
+
+  if [[ -f "${INSTALL_DIR}/bin/panel-api.bak" ]]; then
+    log "rolling back panel-api/web to the previous version"
+    stop_if_active sky-panel
+    install -m 755 "${INSTALL_DIR}/bin/panel-api.bak" "${INSTALL_DIR}/bin/panel-api"
+    if [[ -d "${INSTALL_DIR}/web.bak" ]]; then
+      rm -rf "${INSTALL_DIR}/web.rollback-tmp"
+      mv "${INSTALL_DIR}/web" "${INSTALL_DIR}/web.rollback-tmp"
+      cp -a "${INSTALL_DIR}/web.bak" "${INSTALL_DIR}/web"
+      rm -rf "${INSTALL_DIR}/web.rollback-tmp"
+      chown -R "$SERVICE_USER":"$SERVICE_USER" "${INSTALL_DIR}/web"
+      log "restored web from ${INSTALL_DIR}/web.bak"
+    fi
+    chown -R "$SERVICE_USER":"$SERVICE_USER" "${INSTALL_DIR}/bin/panel-api"
+    start_if_enabled sky-panel
+    log "restored panel-api from ${INSTALL_DIR}/bin/panel-api.bak"
+    restored=1
+  fi
+
+  if [[ -f "${INSTALL_DIR}/bin/sky-daemon.bak" ]]; then
+    log "rolling back sky-daemon to the previous version"
+    stop_if_active sky-daemon
+    install -m 755 "${INSTALL_DIR}/bin/sky-daemon.bak" "${INSTALL_DIR}/bin/sky-daemon"
+    # sky-daemon runs as root; still normalize ownership to root explicitly.
+    chown root:root "${INSTALL_DIR}/bin/sky-daemon"
+    start_if_enabled sky-daemon
+    log "restored sky-daemon from ${INSTALL_DIR}/bin/sky-daemon.bak"
+    restored=1
+  fi
+
+  [[ "$restored" -eq 1 ]] || fail "nothing to roll back — no .bak files found (has an update ever run?)"
+  log "rollback complete"
+}
+
 # Print the top (most recent) section of a repo's CHANGELOG.md. The body is
 # captured into a variable first rather than piped straight into awk: piping
 # `curl | awk '... exit'` makes awk close the pipe early, so curl dies with
@@ -62,6 +115,12 @@ print_changelog() {
 }
 
 ARCH="$(detect_arch)"
+
+if [[ "$ROLLBACK" -eq 1 ]]; then
+  do_rollback
+  exit 0
+fi
+
 UPDATED_ANYTHING=0
 
 # panel-api + web (Notbangbang-dev/sky-panel releases).
@@ -107,6 +166,11 @@ if [[ -f "${INSTALL_DIR}/bin/panel-api" ]]; then
     rm -rf "${INSTALL_DIR}/web.bak"
     mv "${INSTALL_DIR}/web" "${INSTALL_DIR}/web.bak"
     mv "${INSTALL_DIR}/web.new" "${INSTALL_DIR}/web"
+
+    # The swapped-in binary and web dir are written as root here; install.sh
+    # runs panel-api as SERVICE_USER, so re-apply ownership or the service can
+    # end up unable to read its own files after an update.
+    chown -R "$SERVICE_USER":"$SERVICE_USER" "${INSTALL_DIR}/bin/panel-api" "${INSTALL_DIR}/web"
 
     start_if_enabled sky-panel
     rm -rf "$WORKDIR"

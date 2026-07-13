@@ -28,14 +28,33 @@ The node daemon (`sky-daemon`, Rust) lives at [Notbangbang-dev/sky-daemon](https
 
 ```bash
 # panel-api
-cd panel-api && go build ./... && go test ./...
+cd panel-api && go build ./... && go vet ./... && go test ./...
 
 # web
-cd web && npm install && npm run dev
+cd web && npm install && npm run typecheck && npm test && npm run dev
 
 # site
 cd site && npm install && npm run dev
 ```
+
+> Running panel-api locally? Either set `SKY_JWT_ACCESS_SECRET` / `SKY_JWT_REFRESH_SECRET` to strong random values, or export `SKY_DEV_MODE=1` — as of v0.24.0 the server refuses to start on the built-in default secrets (see below).
+
+## Configuration (panel-api)
+
+All configuration is via environment variables (systemd `EnvironmentFile` in production):
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `SKY_HTTP_ADDR` | `:8080` | Listen address. |
+| `SKY_DB_PATH` | `sky-panel.db` | SQLite path (WAL mode is enabled automatically for file DBs). |
+| `SKY_JWT_ACCESS_SECRET` | — | **Required in production.** ≥32 random chars (`openssl rand -hex 32`). Boot fails if unset/default/short. |
+| `SKY_JWT_REFRESH_SECRET` | — | **Required in production.** As above. |
+| `SKY_ACCESS_TTL` | `15m` | Access-token lifetime. |
+| `SKY_REFRESH_TTL` | `720h` | Refresh-token lifetime. |
+| `SKY_CORS_ORIGIN` | `*` | Pin `Access-Control-Allow-Origin` to your panel's origin. |
+| `SKY_DEV_MODE` | `false` | Relaxes the secret-strength check for local dev. **Never set in production.** |
+
+The bundled `installer/install.sh` generates strong secrets, verifies release binaries against published SHA-256 checksums, and configures Caddy with a Content-Security-Policy and HTTPS. `sky-panel-update` updates in place (with `--rollback`), and `uninstall.sh` removes an install cleanly. See [SECURITY.md](SECURITY.md) for the hardening checklist and how to report a vulnerability.
 
 ## Status
 

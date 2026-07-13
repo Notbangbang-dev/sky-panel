@@ -9,9 +9,21 @@ EnvironmentFile=/opt/sky-panel/sky-daemon.env
 ExecStart=/opt/sky-panel/bin/sky-daemon
 Restart=on-failure
 RestartSec=2
-# The daemon talks to the Docker Engine API over /var/run/docker.sock, so it
-# needs to run as a user in the docker group rather than fully unprivileged.
+# Trust model: sky-daemon runs as root on purpose. It drives the Docker Engine
+# over /var/run/docker.sock (root-equivalent) and may manage the host firewall
+# (ufw) as root. Treat the node host as inside the panel's trust boundary.
+# The hardening below is deliberately conservative so it does NOT break either
+# of those: no ProtectSystem=strict and no PrivateTmp (both can interfere with
+# docker's socket/temp handling), and namespaces are left unrestricted because
+# containers need them.
 User=root
+NoNewPrivileges=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# Docker/containerd create and enter namespaces — must stay unrestricted.
+RestrictNamespaces=false
 
 [Install]
 WantedBy=multi-user.target

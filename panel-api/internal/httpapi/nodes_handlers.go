@@ -131,6 +131,19 @@ func (d Deps) ListNodesSlim(w http.ResponseWriter, r *http.Request) {
 
 func (d Deps) DeleteNode(w http.ResponseWriter, r *http.Request) {
 	id := pathParam(r, "nodeID")
+
+	// Refuse to delete a node that still hosts servers. Deleting it would
+	// CASCADE those server (and database/allocation) rows away, orphaning the
+	// real Docker containers and MariaDB databases on the box with no pointer
+	// left to reclaim them. The operator must delete or move the servers first.
+	if n, err := d.Servers.CountByNode(id); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error", "failed to check node servers")
+		return
+	} else if n > 0 {
+		writeError(w, http.StatusConflict, "node_in_use", fmt.Sprintf("this node still hosts %d server(s); delete or move them before removing the node", n))
+		return
+	}
+
 	if err := d.Nodes.Delete(id); err != nil {
 		if errors.Is(err, repo.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "not_found", "node not found")
@@ -139,6 +152,8 @@ func (d Deps) DeleteNode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to delete node")
 		return
 	}
+	// Sever any live daemon connection so its now-deleted token stops working.
+	d.AgentHub.Registry.Close(id)
 	d.audit(r, "node.delete", id, "")
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -169,6 +184,10 @@ func (d Deps) RotateNodeToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to rotate node token")
 		return
 	}
+	// Drop the live connection authenticated with the old token so it can't keep
+	// operating until it happens to reconnect — the daemon must re-hello with the
+	// new token.
+	d.AgentHub.Registry.Close(id)
 	d.audit(r, "node.rotate_token", id, "")
 
 	writeJSON(w, http.StatusOK, map[string]string{"node_token": rawToken, "expires_at": expiresAt.Format(rfc3339)})

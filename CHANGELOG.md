@@ -2,6 +2,59 @@
 
 All notable changes to Sky Panel are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.24.0] - 2026-07-12 — "Aegis"
+
+A security, stability, and polish release. Aegis closes the panel's biggest abuse vectors (there was no HTTP rate limiting anywhere), hardens the node connection and admin controls, tunes the database for real concurrency, and adds quality-of-life across the UI — without removing a single existing feature.
+
+### 🔒 Security & anti-abuse
+
+- **Rate limiting, everywhere it matters.** A new middleware layer throttles the whole API. Per-IP limits on `/auth/*` stop password brute-force, credential-stuffing, and registration spam; per-user limits protect the coin economy (gift, redeem, daily, store, AFK), redeem-code guessing, and expensive server operations (create, clone, reinstall, backup, file writes, database create); and a global per-IP backstop absorbs floods. Exceeding a limit returns `429` with a `Retry-After` header.
+- **The panel refuses to boot with insecure JWT secrets.** If `SKY_JWT_ACCESS_SECRET` / `SKY_JWT_REFRESH_SECRET` are unset, left at the old built-in development defaults, or shorter than 32 characters, panel-api now exits at startup with a clear message instead of silently signing tokens anyone could forge. Set `SKY_DEV_MODE=1` to relax this for local development only.
+- **Last-admin protection.** An admin can no longer demote themselves, or demote/delete the last remaining admin — closing a footgun that could permanently lock everyone out of the admin console. A role change now also revokes the target's sessions so it takes effect immediately instead of lingering until their access token expired.
+- **Backup filename validation.** Restore/delete now reject any filename containing path separators, `..`, or a leading dot, and require the expected `.tar.zst` extension — a user-supplied filename can no longer escape the server's backup directory.
+- **Suspended servers are truly frozen.** A suspended server now rejects file writes, backups (manual and scheduled), mod installs, database creation, and automations from its owner/subusers — not just power and console. Suspension is enforced across every state-changing path; admins remain exempt.
+- **Node connection hardening.** Rotating a node's token or deleting a node now immediately severs the live daemon connection, so an old secret stops working at once. Deleting a node that still hosts servers is refused (previously it would CASCADE the rows away and orphan the real containers/databases). The agent WebSocket now enforces a handshake deadline, ping/pong keepalive, a read-size cap, and a write deadline — eliminating a goroutine/FD leak from idle or half-open connections and a pre-auth connection-flood DoS.
+- **Tighter defaults & input validation.** WebSocket topic authorization is now deny-by-default (only known topics are subscribable); CORS can be pinned to your panel's origin via `SKY_CORS_ORIGIN`; per-user API-key count is capped; request bodies are size-limited on auth/admin/server endpoints; server resource inputs are validated (no negative/zero specs); emails are normalized (case-insensitive, trimmed) to prevent duplicate/lookup-mismatch accounts; admin settings are schema-validated so economy/quota knobs can't be pushed to absurd values; and admin-set background image/video URLs are restricted to `http(s)`. The bundled Caddy config now ships a Content-Security-Policy and standard security headers, and release binaries are verified against published SHA-256 checksums at install time.
+
+### 🛡️ Stability & correctness fixes
+
+- **Editing settings, changing ports, or reinstalling no longer force-starts a stopped server** — the server's power state is preserved across re-provisioning.
+- **Refresh-token rotation is now single-use even on the error path**, so a transient failure can't leave a refresh token replayable.
+- **The admin quota editor now includes the databases dimension** (it was silently dropped on read and save).
+- **Per-server backup cap** prevents a user or a runaway schedule from filling a node's disk with unlimited backups.
+- Suspended servers are excluded from the backup and automation schedulers.
+
+### ⚡ Performance
+
+- **SQLite now runs in WAL mode with `synchronous=NORMAL`**, letting reads run concurrently with writes — the single biggest concurrency win given AFK heartbeats, two schedulers, and provisioning all writing at once.
+- **New covering index** on `ledger_entries(user_id, created_at)` removes a sort from the fast-growing wallet query, plus an index to keep session pruning cheap.
+- **Background retention** prunes expired refresh tokens and old audit-log entries so those tables stay bounded.
+- **Frontend query tuning**: no more retrying doomed 4xx requests, a sane stale-time, and a single global error surface.
+
+### ✨ New & improved (UX)
+
+- **Toast notifications** — a lightweight, on-brand notification stack surfaces successes and failures instead of silent no-ops, and background query errors now always tell you what went wrong.
+- **App-wide error boundary** — a thrown render error shows a legible recovery screen with a reload button instead of a blank page.
+- **Server search & status filter** on the servers list, with a proper empty state.
+- **Bounded console scrollback** keeps the server console responsive on chatty/long-running servers (fixes an unbounded-memory growth bug).
+
+### 🧹 Housekeeping
+
+- `SECURITY.md`, `CONTRIBUTING.md`, issue/PR templates, and a Dependabot config added; CI gains a concurrency group and dependency caching.
+- Marketing site version is now driven from a single source (was stuck showing an ancient version), and the changelog page falls back to a bundled copy instead of showing an empty page on a fetch hiccup.
+- `sky-panel-update --rollback` restores the previous release in one command; a first-class `uninstall.sh` is included; the daemon systemd unit is sandboxed; and `docs/DATABASES.md`'s daemon env-file path is corrected.
+
+### ⚙️ Upgrade & migration notes
+
+- **Set your JWT secrets.** After upgrading, panel-api will refuse to start unless `SKY_JWT_ACCESS_SECRET` and `SKY_JWT_REFRESH_SECRET` are set to strong values (≥32 chars). The installer already generates these; hand-rolled deployments must add them (`openssl rand -hex 32`) or set `SKY_DEV_MODE=1` for local dev.
+- **New optional env vars:** `SKY_CORS_ORIGIN` (pin CORS to your panel origin), `SKY_DEV_MODE` (relax secret checks — never in production).
+- A new database migration (`0019`) adds performance indexes; it applies automatically on start and is backwards-compatible.
+- No breaking API changes. No daemon upgrade is required for this release.
+
+### 🗺️ Known limitations / roadmap
+
+Deliberately deferred to a future release (documented, not dropped): TOTP recovery codes and self-service password reset; per-session IP/device metadata; backups as a purchasable quota dimension; finer-grained subuser permissions; SFTP + bulk file download; a syntax-highlighting file editor; multiplexed live WebSocket topics; server-side pagination for large fleets; and fully transactional store purchases (the current flow still refunds on a failed grant).
+
 ## [0.23.0] - 2026-07-08
 
 ### ✨ New Features

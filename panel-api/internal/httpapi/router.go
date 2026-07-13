@@ -15,12 +15,17 @@ import (
 
 func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
+	rl := newRateLimiters(d.RateLimitEnabled)
+
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30 * time.Second))
-	r.Use(corsMiddleware)
+	r.Use(corsMiddleware(d.CORSOrigin))
+	// Per-IP flood backstop across the whole API (no-op when rate limiting is
+	// disabled). Tighter, purpose-built limits are applied per-route below.
+	r.Use(rl.byIP(rl.globalIP))
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -28,6 +33,9 @@ func NewRouter(d Deps) http.Handler {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
+			// Per-IP limit on the credential endpoints defends against
+			// brute-force / credential-stuffing and registration spam.
+			r.Use(rl.byIP(rl.authIP))
 			r.Post("/register", d.Register)
 			r.Post("/login", d.Login)
 			r.Post("/refresh", d.Refresh)
@@ -67,13 +75,13 @@ func NewRouter(d Deps) http.Handler {
 
 			r.Route("/servers", func(r chi.Router) {
 				r.Get("/", d.ListServers)
-				r.Post("/", d.CreateServer)
+				r.With(rl.byUser(rl.create)).Post("/", d.CreateServer)
 				r.Get("/{serverID}", d.GetServer)
 				r.Patch("/{serverID}", d.UpdateServer)
 				r.Delete("/{serverID}", d.DeleteServer)
 				r.Post("/{serverID}/power", d.PowerAction)
-				r.Post("/{serverID}/reinstall", d.ReinstallServer)
-				r.Post("/{serverID}/clone", d.CloneServer)
+				r.With(rl.byUser(rl.create)).Post("/{serverID}/reinstall", d.ReinstallServer)
+				r.With(rl.byUser(rl.create)).Post("/{serverID}/clone", d.CloneServer)
 				r.Post("/{serverID}/favorite", d.FavoriteServer)
 				r.Delete("/{serverID}/favorite", d.UnfavoriteServer)
 				r.Put("/{serverID}/description", d.SetServerDescription)
@@ -84,8 +92,8 @@ func NewRouter(d Deps) http.Handler {
 				r.Get("/{serverID}/activity", d.ServerActivity)
 
 				r.Get("/{serverID}/backups", d.ListBackups)
-				r.Post("/{serverID}/backups", d.CreateBackup)
-				r.Post("/{serverID}/backups/restore", d.RestoreBackup)
+				r.With(rl.byUser(rl.backups)).Post("/{serverID}/backups", d.CreateBackup)
+				r.With(rl.byUser(rl.backups)).Post("/{serverID}/backups/restore", d.RestoreBackup)
 				r.Delete("/{serverID}/backups", d.DeleteBackup)
 
 				r.Get("/{serverID}/schedules", d.ListSchedules)
@@ -98,16 +106,16 @@ func NewRouter(d Deps) http.Handler {
 				r.Delete("/{serverID}/subusers/{userID}", d.RemoveSubuser)
 
 				r.Get("/{serverID}/databases", d.ListDatabases)
-				r.Post("/{serverID}/databases", d.CreateDatabase)
+				r.With(rl.byUser(rl.database)).Post("/{serverID}/databases", d.CreateDatabase)
 				r.Delete("/{serverID}/databases/{databaseID}", d.DeleteDatabase)
 
 				r.Get("/{serverID}/files", d.ListFiles)
 				r.Get("/{serverID}/files/content", d.ReadFile)
-				r.Put("/{serverID}/files/content", d.WriteFile)
-				r.Post("/{serverID}/modrinth/install", d.ModrinthInstall)
-				r.Post("/{serverID}/files/rename", d.RenameFile)
-				r.Delete("/{serverID}/files", d.DeleteFile)
-				r.Post("/{serverID}/files/mkdir", d.Mkdir)
+				r.With(rl.byUser(rl.files)).Put("/{serverID}/files/content", d.WriteFile)
+				r.With(rl.byUser(rl.files)).Post("/{serverID}/modrinth/install", d.ModrinthInstall)
+				r.With(rl.byUser(rl.files)).Post("/{serverID}/files/rename", d.RenameFile)
+				r.With(rl.byUser(rl.files)).Delete("/{serverID}/files", d.DeleteFile)
+				r.With(rl.byUser(rl.files)).Post("/{serverID}/files/mkdir", d.Mkdir)
 			})
 
 			r.Get("/eggs", d.ListEggs)
@@ -115,14 +123,14 @@ func NewRouter(d Deps) http.Handler {
 			r.Get("/nodes", d.ListNodesSlim)
 
 			r.Get("/wallet", d.Wallet)
-			r.Post("/afk/heartbeat", d.AFKHeartbeat)
-			r.Post("/daily-reward/claim", d.ClaimDailyReward)
+			r.With(rl.byUser(rl.afk)).Post("/afk/heartbeat", d.AFKHeartbeat)
+			r.With(rl.byUser(rl.economy)).Post("/daily-reward/claim", d.ClaimDailyReward)
 
 			r.Get("/store", d.ListStore)
-			r.Post("/store/purchase", d.PurchaseStoreItem)
+			r.With(rl.byUser(rl.purchase)).Post("/store/purchase", d.PurchaseStoreItem)
 
-			r.Post("/coins/gift", d.GiftCoins)
-			r.Post("/coins/redeem", d.RedeemCode)
+			r.With(rl.byUser(rl.economy)).Post("/coins/gift", d.GiftCoins)
+			r.With(rl.byUser(rl.redeem)).Post("/coins/redeem", d.RedeemCode)
 
 			r.Group(func(r chi.Router) {
 				r.Use(auth.RequireRole(string(models.RoleAdmin)))
@@ -226,40 +234,64 @@ func (d Deps) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// authorizedForTopic decides whether a caller may subscribe to a live topic.
+// It is deny-by-default: only explicitly-known topics are grantable, so a new
+// topic added later can't be silently subscribable by anyone before its
+// authorization is considered.
 func (d Deps) authorizedForTopic(claims *auth.Claims, topic string) bool {
+	// The global broadcast channel is readable by any authenticated user.
+	if topic == "broadcast" {
+		return true
+	}
+
+	// Per-server live topics (server:<id>:stats|console|state) require the
+	// caller to own the server, be an admin, or be a subuser on it.
 	parts := strings.Split(topic, ":")
-	if len(parts) != 3 || parts[0] != "server" {
-		return true
-	}
-
-	if claims.Role == string(models.RoleAdmin) {
-		return true
-	}
-
-	server, err := d.Servers.GetByID(parts[1])
-	if err != nil {
+	if len(parts) == 3 && parts[0] == "server" {
+		if claims.Role == string(models.RoleAdmin) {
+			return true
+		}
+		server, err := d.Servers.GetByID(parts[1])
+		if err != nil {
+			return false
+		}
+		if server.OwnerID == claims.UserID {
+			return true
+		}
+		// A subuser granted access to this server may also watch its live topics —
+		// otherwise they can control it over HTTP but never see real-time updates.
+		if _, err := d.Subusers.Get(parts[1], claims.UserID); err == nil {
+			return true
+		}
 		return false
 	}
-	if server.OwnerID == claims.UserID {
-		return true
-	}
-	// A subuser granted access to this server may also watch its live topics —
-	// otherwise they can control it over HTTP but never see real-time updates.
-	if _, err := d.Subusers.Get(parts[1], claims.UserID); err == nil {
-		return true
-	}
+
+	// Anything else is not a recognised topic — deny.
 	return false
 }
 
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+// corsMiddleware pins Access-Control-Allow-Origin to the configured origin when
+// one is set (SKY_CORS_ORIGIN), and otherwise falls back to the permissive "*"
+// used in dev / single-origin deployments behind the bundled Caddy proxy.
+func corsMiddleware(origin string) func(http.Handler) http.Handler {
+	allowOrigin := origin
+	if allowOrigin == "" {
+		allowOrigin = "*"
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+			if allowOrigin != "*" {
+				// Vary so shared caches don't serve one origin's CORS headers to another.
+				w.Header().Add("Vary", "Origin")
+			}
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

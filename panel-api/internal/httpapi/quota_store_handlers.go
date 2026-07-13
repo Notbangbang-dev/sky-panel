@@ -139,7 +139,7 @@ func (d Deps) writeAdminQuota(w http.ResponseWriter, userID string) {
 	}
 	writeJSON(w, http.StatusOK, adminQuotaResponse{
 		Usage: usage, Limit: limit,
-		Bonus: adminQuotaRequest{MemoryBytes: bonus.MemoryBytes, CPUPercent: bonus.CPUPercent, DiskBytes: bonus.DiskBytes},
+		Bonus: adminQuotaRequest{MemoryBytes: bonus.MemoryBytes, CPUPercent: bonus.CPUPercent, DiskBytes: bonus.DiskBytes, Databases: bonus.Databases},
 	})
 }
 
@@ -147,6 +147,7 @@ type adminQuotaRequest struct {
 	MemoryBytes int64 `json:"memory_bytes"`
 	CPUPercent  int   `json:"cpu_percent"`
 	DiskBytes   int64 `json:"disk_bytes"`
+	Databases   int   `json:"databases"`
 }
 
 // AdminSetUserQuota sets a user's bonus quota (the amount added on top of the
@@ -163,7 +164,11 @@ func (d Deps) AdminSetUserQuota(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "invalid request body")
 		return
 	}
-	if err := d.Quotas.Set(userID, req.MemoryBytes, req.CPUPercent, req.DiskBytes); err != nil {
+	if req.MemoryBytes < 0 || req.CPUPercent < 0 || req.DiskBytes < 0 || req.Databases < 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "quota values cannot be negative")
+		return
+	}
+	if err := d.Quotas.Set(userID, req.MemoryBytes, req.CPUPercent, req.DiskBytes, req.Databases); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error", "failed to set quota")
 		return
 	}
