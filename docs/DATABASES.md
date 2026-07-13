@@ -65,9 +65,9 @@ is enough — it never needs to be reachable remotely.
 ## 4. Point the daemon at MariaDB
 
 Add these to the daemon's environment. If you used Sky Panel's installer, the
-daemon runs as a systemd unit — edit its env file (e.g.
-`/etc/sky-panel/daemon.env`, or add an `Environment=` / `EnvironmentFile=` to
-`/etc/systemd/system/sky-daemon.service`):
+daemon runs as a systemd unit and reads its env from
+`/opt/sky-panel/sky-daemon.env` (the `EnvironmentFile=` in
+`/etc/systemd/system/sky-daemon.service`) — edit that file:
 
 ```bash
 SKY_DB_ADMIN_USER=skyadmin
@@ -81,6 +81,15 @@ Setting **`SKY_DB_ADMIN_USER`** is what turns the feature on. `SKY_DB_PUBLIC_HOS
 is the address baked into the connection details shown to users — set it to the
 node's public IP or DNS name (it falls back to `SKY_DB_ADMIN_HOST` if unset,
 which is only correct for a single-machine dev setup).
+
+> **Behind NAT / a published Docker port?** If users must connect to MariaDB on
+> a *different* port than the daemon uses internally — for example the daemon
+> talks to `127.0.0.1:3306` but the port is published/forwarded to the outside
+> world as some other port — set **`SKY_DB_PUBLIC_PORT`** to that external port.
+> It's the public counterpart to `SKY_DB_PUBLIC_HOST` and only affects the port
+> shown in the user-facing connection details; it falls back to
+> `SKY_DB_ADMIN_PORT` when unset (the common case where the port is the same
+> inside and out).
 
 Reload and restart:
 

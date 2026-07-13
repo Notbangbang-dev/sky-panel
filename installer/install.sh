@@ -26,7 +26,12 @@ shift || true
 
 DOMAIN=""
 PANEL_URL=""
-NODE_TOKEN=""
+# The node token is a secret. Prefer sourcing it from the environment
+# (SKY_NODE_TOKEN) so it never lands in shell/ps history — this is the
+# recommended form on shared hosts. The --node-token CLI flag still works for
+# compatibility, and if neither is given in node/all mode we fall back to
+# reading it from stdin (again keeping it off the command line).
+NODE_TOKEN="${SKY_NODE_TOKEN:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -76,7 +81,15 @@ create_service_user() {
 }
 
 random_secret() {
-  head -c 48 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48
+  # panel-api refuses to boot with unset/default/short JWT secrets (unless
+  # SKY_DEV_MODE=1), so generate a strong one: 64 hex chars (32 bytes of
+  # entropy). Prefer openssl; fall back to /dev/urandom, still emitting 64
+  # hex characters so the result clears panel-api's >=32-char requirement.
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  else
+    head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'
+  fi
 }
 
 latest_release_tag() {
@@ -87,6 +100,36 @@ latest_release_tag() {
 download_release_asset() {
   local repo="$1" tag="$2" asset="$3" dest="$4"
   curl -fsSL "https://github.com/${repo}/releases/download/${tag}/${asset}" -o "$dest"
+}
+
+# Verify a downloaded release asset against the release's published
+# checksums.txt (same mechanism sky-panel-update uses). The checksum is checked
+# BEFORE we chmod +x / extract / run the asset. Releases that predate
+# checksums.txt simply won't have one — in that case we warn and continue
+# rather than hard-failing an install, but we always verify when it's present.
+verify_release_asset() {
+  local repo="$1" tag="$2" asset="$3" file="$4"
+  local base_url="https://github.com/${repo}/releases/download/${tag}"
+  local sums expected
+  sums="$(mktemp)"
+  if ! curl -fsSL "${base_url}/checksums.txt" -o "$sums" 2>/dev/null; then
+    log "WARNING: no checksums.txt for ${repo} ${tag} — skipping integrity check for ${asset} (this release may predate published checksums)"
+    rm -f "$sums"
+    return 0
+  fi
+  # checksums.txt records hashes against the release asset's own name
+  # (e.g. panel-api-linux-amd64), which usually differs from the local
+  # filename we saved it as — rewrite the checksum line to reference the
+  # local file so sha256sum -c can find it.
+  expected="$(grep " ${asset}\$" "$sums" | awk '{print $1}')"
+  rm -f "$sums"
+  if [[ -z "$expected" ]]; then
+    log "WARNING: checksums.txt for ${repo} ${tag} has no entry for ${asset} — skipping integrity check"
+    return 0
+  fi
+  echo "${expected}  $(basename "$file")" | ( cd "$(dirname "$file")" && sha256sum -c - ) \
+    || fail "checksum verification failed for ${asset}"
+  log "verified ${asset} against checksums.txt"
 }
 
 # install.sh is designed to be curl'd on its own (see the usage comment at
@@ -115,9 +158,11 @@ install_panel() {
   systemctl stop sky-panel 2>/dev/null || true
 
   download_release_asset "$REPO" "$tag" "panel-api-linux-${arch}" "$INSTALL_DIR/bin/panel-api"
+  verify_release_asset "$REPO" "$tag" "panel-api-linux-${arch}" "$INSTALL_DIR/bin/panel-api"
   chmod +x "$INSTALL_DIR/bin/panel-api"
 
   download_release_asset "$REPO" "$tag" "web-dist.tar.gz" "/tmp/sky-panel-web.tar.gz"
+  verify_release_asset "$REPO" "$tag" "web-dist.tar.gz" "/tmp/sky-panel-web.tar.gz"
   tar -xzf /tmp/sky-panel-web.tar.gz -C "$INSTALL_DIR/web"
   rm -f /tmp/sky-panel-web.tar.gz
 
@@ -126,9 +171,19 @@ install_panel() {
     cat > "$INSTALL_DIR/panel-api.env" <<EOF
 SKY_HTTP_ADDR=127.0.0.1:8080
 SKY_DB_PATH=${INSTALL_DIR}/data/sky-panel.db
+# panel-api refuses to start unless these are set to long, unique random
+# secrets (>=32 chars). Generated here as 64 hex chars. Do NOT reuse across
+# installs, and rotating them logs everyone out.
 SKY_JWT_ACCESS_SECRET=$(random_secret)
 SKY_JWT_REFRESH_SECRET=$(random_secret)
+# Optional: pin CORS to your panel's exact origin instead of the permissive
+# default (recommended once you know your URL), e.g.
+# SKY_CORS_ORIGIN=https://panel.example.com
+# Optional: relaxes the secret-strength boot checks. For LOCAL DEVELOPMENT
+# ONLY — never set this in production.
+# SKY_DEV_MODE=1
 EOF
+    chmod 600 "$INSTALL_DIR/panel-api.env"
   fi
 
   echo "$tag" > "$INSTALL_DIR/VERSION"
@@ -170,6 +225,19 @@ ${site} {
         reverse_proxy 127.0.0.1:8080
     }
     handle {
+        # Security headers on the SPA/static responses only. These are inside
+        # the fall-through `handle` (not the /api/*, /ws or /agent/ws proxy
+        # blocks above), so the CSP can't break API calls or WebSockets.
+        # The app uses inline styles (unsafe-inline in style-src) and loads
+        # Google Fonts (fonts.googleapis.com stylesheet + fonts.gstatic.com
+        # font files); its own bundled JS is same-origin ('self'), and its
+        # same-origin API/WS calls are covered by connect-src 'self' + ws/wss.
+        header {
+            Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https:; media-src 'self' https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https: wss: ws:; frame-ancestors 'none'; base-uri 'self'"
+            X-Content-Type-Options "nosniff"
+            X-Frame-Options "DENY"
+            Referrer-Policy "strict-origin-when-cross-origin"
+        }
         root * ${INSTALL_DIR}/web
         try_files {path} /index.html
         file_server
@@ -180,10 +248,21 @@ EOF
   systemctl reload caddy
 }
 
+# Resolve the node token, preferring forms that keep it out of shell/ps
+# history: SKY_NODE_TOKEN env (already folded into $NODE_TOKEN above) or
+# --node-token, else read it from stdin if we have a terminal to prompt on.
+resolve_node_token() {
+  if [[ -z "$NODE_TOKEN" && -t 0 ]]; then
+    read -rsp "Node token (from the admin console): " NODE_TOKEN
+    echo >&2
+  fi
+}
+
 install_node() {
   require_apt
   [[ -n "$PANEL_URL" ]] || fail "--panel-url is required for node mode"
-  [[ -n "$NODE_TOKEN" ]] || fail "--node-token is required for node mode (create the node from the admin console first)"
+  resolve_node_token
+  [[ -n "$NODE_TOKEN" ]] || fail "node token is required for node mode — set SKY_NODE_TOKEN (preferred on shared hosts), pass --node-token, or run interactively to be prompted (create the node from the admin console first)"
 
   local arch tag
   arch="$(detect_arch)"
@@ -196,6 +275,7 @@ install_node() {
   mkdir -p "$INSTALL_DIR/bin" "$VOLUMES_ROOT"
   systemctl stop sky-daemon 2>/dev/null || true
   download_release_asset "$DAEMON_REPO" "$tag" "sky-daemon-linux-${arch}" "$INSTALL_DIR/bin/sky-daemon"
+  verify_release_asset "$DAEMON_REPO" "$tag" "sky-daemon-linux-${arch}" "$INSTALL_DIR/bin/sky-daemon"
   chmod +x "$INSTALL_DIR/bin/sky-daemon"
 
   cat > "$INSTALL_DIR/sky-daemon.env" <<EOF
@@ -225,12 +305,13 @@ case "$MODE" in
   all)
     install_panel
     PANEL_URL="${PANEL_URL:-ws://127.0.0.1:8080/agent/ws}"
+    resolve_node_token
     if [[ -z "$NODE_TOKEN" ]]; then
-      fail "--node-token is required for 'all' mode too (register the first admin account, create a node from the admin console, then re-run with --node-token)"
+      fail "a node token is required for 'all' mode too — register the first admin account, create a node from the admin console, then re-run with SKY_NODE_TOKEN=... (preferred) or --node-token"
     fi
     install_node
     ;;
   *)
-    fail "usage: install.sh <panel|node|all> [--domain ...] [--panel-url ...] [--node-token ...]"
+    fail "usage: install.sh <panel|node|all> [--domain ...] [--panel-url ...] [--node-token ...]  (node token may also come from SKY_NODE_TOKEN env or stdin)"
     ;;
 esac

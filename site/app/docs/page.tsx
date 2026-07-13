@@ -42,7 +42,10 @@ const GROUPS: DocGroup[] = [
   },
   {
     group: "Operations",
-    items: [{ id: "security", label: "Security" }],
+    items: [
+      { id: "security", label: "Security" },
+      { id: "uninstalling", label: "Uninstalling" },
+    ],
   },
 ];
 
@@ -329,6 +332,89 @@ export default function DocsPage() {
                 <li>API keys and refresh tokens are stored only as hashes; raw secrets are shown once.</li>
                 <li>Registration can be turned off entirely from the admin console once your team is set up.</li>
               </ul>
+            </Section>
+
+            <Section id="uninstalling" title="Uninstalling" kicker="Operations">
+              <p>
+                Sky Panel installs cleanly and removes cleanly — everything lives under a handful of predictable paths, so
+                there&apos;s no uninstaller to run, just a short sequence per box. Remove the same halves you installed:
+                the <strong>panel</strong> steps on your control-plane box, the <strong>node</strong> steps on each
+                game-server box, or both on an all-in-one setup.
+              </p>
+              <Callout tone="warn" title="This is irreversible — back up first">
+                Two paths hold the only copies of your data: <code>/opt/sky-panel/data/sky-panel.db</code> (every user,
+                node, egg and server record) on the panel box, and <code>/srv/sky-panel/volumes</code> (every server&apos;s
+                files) on each node. Copy them somewhere safe before you start if there&apos;s any chance you&apos;ll want
+                them back.
+              </Callout>
+
+              <p className="font-mono text-text">Panel box</p>
+              <p>Stop the service, drop its unit, then remove the install directory, the update helper and the service user.</p>
+              <CodeBlock
+                label="remove the panel"
+                code={`# stop and disable the control plane
+sudo systemctl disable --now sky-panel
+
+# remove its systemd unit and reload
+sudo rm -f /etc/systemd/system/sky-panel.service
+sudo systemctl daemon-reload
+
+# remove binaries, web UI, config and the database
+sudo rm -rf /opt/sky-panel
+
+# remove the update helper and the service user
+sudo rm -f /usr/local/bin/sky-panel-update
+sudo userdel sky-panel`}
+              />
+              <Callout title="Caddy is optional to remove">
+                The panel installs Caddy for automatic HTTPS. If nothing else on the box uses it, you can remove it too —
+                otherwise just delete the Sky Panel site from its config.
+              </Callout>
+              <CodeBlock
+                label="remove Caddy (only if unused elsewhere)"
+                code={`sudo systemctl disable --now caddy
+sudo rm -f /etc/caddy/Caddyfile
+sudo apt-get remove -y caddy
+sudo rm -f /etc/apt/sources.list.d/caddy-stable.list \\
+  /usr/share/keyrings/caddy-stable-archive-keyring.gpg`}
+              />
+
+              <p className="font-mono text-text">Node box</p>
+              <p>
+                Stop the daemon, remove the game-server containers it created (each is named <code>sky-&lt;server-id&gt;</code>),
+                then remove the daemon and — if you&apos;re sure — the server files.
+              </p>
+              <CodeBlock
+                label="remove a node"
+                code={`# stop and disable the daemon
+sudo systemctl disable --now sky-daemon
+sudo rm -f /etc/systemd/system/sky-daemon.service
+sudo systemctl daemon-reload
+
+# stop and remove every server container Sky Panel created
+docker ps -aq --filter "name=sky-" | xargs -r docker rm -f
+
+# remove the daemon binary, env and update helper
+sudo rm -rf /opt/sky-panel
+sudo rm -f /usr/local/bin/sky-panel-update
+
+# remove all server files — irreversible
+sudo rm -rf /srv/sky-panel/volumes`}
+              />
+              <Callout title="Docker stays">
+                Sky Panel installs Docker on a node only if it wasn&apos;t already there, and never removes it — other
+                things may depend on it. If this box was dedicated to Sky Panel and you want Docker gone too, remove it
+                with your distro&apos;s package manager afterwards. Egg images stay cached until you{" "}
+                <code>docker image prune</code> them; server data is bind-mounted from{" "}
+                <code>/srv/sky-panel/volumes</code>, so there are no leftover named Docker volumes to clean up.
+              </Callout>
+
+              <p className="font-mono text-text">All-in-one box</p>
+              <p>
+                If you installed with <code>all</code>, run the panel steps and the node steps on the same box. The shared{" "}
+                <code>/opt/sky-panel</code> directory holds both halves, so a single <code>sudo rm -rf /opt/sky-panel</code>{" "}
+                clears everything once both services are stopped and disabled.
+              </p>
             </Section>
           </div>
         </div>
